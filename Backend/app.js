@@ -13,6 +13,7 @@ const chatRoutes = require("./Routes/chatRoutes");
 const taxRoutes = require("./Routes/taxRoutes");
 const goalRoutes = require("./Routes/goalRoutes");
 const stockRoutes = require("./Routes/stockRoutes");
+const upstoxRoutes = require("./Routes/upstoxRoutes");
 
 const MONGO_URL = process.env.MONGO_URL;
 const passport = require('./Utils/passportConfig');
@@ -51,6 +52,7 @@ app.use('/tax', taxRoutes);
 app.use('/chat', chatRoutes); 
 app.use('/goal', goalRoutes);
 app.use('/stocks', stockRoutes);
+app.use("/upstox", upstoxRoutes);
 
 app.listen(3000, () => {
   console.log('Server started on 3000');

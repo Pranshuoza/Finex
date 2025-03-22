@@ -22,6 +22,7 @@
     "passport-github-oauth20": "^1.0.4",
     "passport-github2": "^0.1.12",
     "passport-google-oauth20": "^2.0.0",
+    "querystring": "^0.2.1",
     "upstox-js-sdk": "^2.16.0",
     "yahoo-finance2": "^2.13.3"
   }

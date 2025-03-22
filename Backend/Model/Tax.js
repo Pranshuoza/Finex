@@ -12,3 +12,7 @@ const taxSchema = new mongoose.Schema({
     lastUpdated: { type: Date, default: Date.now },
     currentTax: { type: Number, required: true },
 })
+
+const Tax = mongoose.model('Tax', taxSchema)
+
+module.exports = Tax

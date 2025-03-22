@@ -1,491 +1,481 @@
-import React, { useState, useEffect } from "react";
-import axios from "axios";
-import { RefreshCw, TrendingUp, TrendingDown } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "../../Components/ui/card";
-import { Alert, AlertDescription } from "../../Components/ui/alert";
-import { Button } from "../../Components/ui/button";
-import { Input } from "../../Components/ui/input";
-import { Label } from "../../Components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../Components/ui/dialog";
+import { useState, useEffect } from "react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { ChevronDown, ArrowUpRight, Zap, Star, Search } from "lucide-react";
 
-const BASE_URL = "http://localhost:3000/investment";
+const BASE_API_URL = "http://localhost:3000/stocks";
 
-const StockApp = () => {
-  const [query, setQuery] = useState("");
-  const [suggestions, setSuggestions] = useState([]);
-  const [investments, setInvestments] = useState([]);
-  const [token] = useState(localStorage.getItem("token") || "");
-  const [showModal, setShowModal] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("active");
-  const [currentStock, setCurrentStock] = useState({
-    symbol: "",
-    quantity: 0,
-    purchasePrice: 0,
-    purchaseDate: new Date().toISOString().split('T')[0],
-    salePrice: 0,
-    saleDate: "",
-  });
-  const [stats, setStats] = useState({
-    active: { totalInvestment: 0, currentValue: 0, unrealizedPL: 0, numberOfStocks: 0 },
-    sold: { totalInvestment: 0, totalReturns: 0, realizedPL: 0, shortTermGains: 0, longTermGains: 0, numberOfStocks: 0 },
-  });
+export default function Dashboard() {
+  const [stockData, setStockData] = useState([]);
+  const [monthlySpending, setMonthlySpending] = useState([]);
+  const [portfolioData, setPortfolioData] = useState([]);
+  const [aiRecommendations, setAiRecommendations] = useState([]);
+  const [totalInvestments, setTotalInvestments] = useState(0);
+  const [currentValue, setCurrentValue] = useState(0);
+  const [overallPL, setOverallPL] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [newStock, setNewStock] = useState({ stockName: "", symbol: "", quantity: "", purchasePrice: "" });
+  const [sellStock, setSellStock] = useState({ stockId: "", quantity: "", salePrice: "" });
+  const [error, setError] = useState(null); // Add error state for debugging
 
+  // Fetch initial dashboard data
   useEffect(() => {
-    if (token) fetchInvestments();
-  }, [token]);
-
-  const fetchInvestments = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get(BASE_URL, { headers: { "x-access-token": token } });
-      setInvestments(response.data.stocks);
-      calculateStats(response.data.stocks);
-    } catch (error) {
-      setError("Failed to fetch investments");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const calculateStats = (stocks) => {
-    const activeStats = { totalInvestment: 0, currentValue: 0, unrealizedPL: 0, numberOfStocks: 0 };
-    const soldStats = { totalInvestment: 0, totalReturns: 0, realizedPL: 0, shortTermGains: 0, longTermGains: 0, numberOfStocks: 0 };
-
-    stocks.forEach(stock => {
-      if (!stock.sold) {
-        activeStats.numberOfStocks++;
-        activeStats.totalInvestment += stock.purchasePrice * stock.quantity;
-        activeStats.currentValue += stock.currentPrice * stock.quantity;
-        activeStats.unrealizedPL += (stock.currentPrice - stock.purchasePrice) * stock.quantity;
-      } else {
-        soldStats.numberOfStocks++;
-        soldStats.totalInvestment += stock.purchasePrice * stock.quantity;
-        soldStats.totalReturns += stock.salePrice * stock.quantity;
-        soldStats.realizedPL += stock.capitalGains || 0;
-        soldStats.shortTermGains += stock.shortTermCapitalGains || 0;
-        soldStats.longTermGains += stock.longTermCapitalGains || 0;
-      }
-    });
-
-    setStats({ active: activeStats, sold: soldStats });
-  };
-
-  const handleSearch = async (e) => {
-    const value = e.target.value;
-    setQuery(value);
-    if (value.length > 1) {
+    const fetchDashboardData = async () => {
       try {
-        const response = await axios.get(`${BASE_URL}/search?q=${value}`);
-        setSuggestions(response.data);
+        const token = localStorage.getItem("token");
+        if (!token) throw new Error("No token found. Please log in.");
+
+        // Portfolio History
+        const historyRes = await fetch(`${BASE_API_URL}/portfolio/history`, {
+          headers: { "x-access-token": token },
+        });
+        if (!historyRes.ok) throw new Error("Failed to fetch portfolio history");
+        const historyData = await historyRes.json();
+        setStockData(
+          historyData.map((item) => ({
+            name: new Date(item.date).toLocaleString("default", { month: "short" }),
+            value: item.totalValue,
+          }))
+        );
+
+        // Stocks
+        const stocksRes = await fetch(`${BASE_API_URL}/`, {
+          headers: { "x-access-token": token },
+        });
+        if (!stocksRes.ok) throw new Error("Failed to fetch stocks");
+        const stocks = await stocksRes.json();
+        const transformedPortfolio = stocks.map((stock) => ({
+          symbol: stock.symbol,
+          netQty: stock.quantity,
+          avgPrice: stock.purchasePrice,
+          ltp: stock.currentPrice,
+          currentValue: stock.currentPrice * stock.quantity,
+          dayPL: (stock.currentPrice - stock.purchasePrice) * stock.quantity,
+          dayPercentage: ((stock.currentPrice - stock.purchasePrice) / stock.purchasePrice) * 100,
+          overallPL: (stock.currentPrice - stock.purchasePrice) * stock.quantity,
+          overallPercentage: ((stock.currentPrice - stock.purchasePrice) / stock.purchasePrice) * 100,
+          stockId: stock._id,
+          sold: stock.sold,
+        }));
+        setPortfolioData(transformedPortfolio.filter((stock) => !stock.sold));
+
+        const totalInv = stocks.reduce((sum, stock) => sum + stock.purchasePrice * stock.quantity, 0);
+        const currValue = stocks.reduce((sum, stock) => sum + stock.currentPrice * stock.quantity, 0);
+        setTotalInvestments(totalInv);
+        setCurrentValue(currValue);
+        setOverallPL(currValue - totalInv);
+
+        // Monthly Spending
+        const monthlyData = historyData.reduce((acc, trans) => {
+          const month = new Date(trans.date).toLocaleString("default", { month: "short" });
+          acc[month] = (acc[month] || 0) + trans.totalValue;
+          return acc;
+        }, {});
+        setMonthlySpending(Object.entries(monthlyData).map(([name, amount]) => ({ name, amount })));
+
+        // AI Recommendations (static)
+        setAiRecommendations([
+          { title: "Diversify Portfolio", description: "Consider adding more tech stocks", action: "View Suggestions" },
+          { title: "Potential Opportunity", description: "NVDA showing strong momentum", action: "Research More" },
+          { title: "Risk Alert", description: "Energy sector exposure high", action: "Rebalance" },
+        ]);
+
+        setLoading(false);
       } catch (error) {
-        setError("Failed to fetch suggestions");
+        console.error("Error fetching dashboard data:", error);
+        setError(error.message);
+        setLoading(false);
       }
-    } else {
-      setSuggestions([]);
-    }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  // Upstox Login
+  const handleUpstoxLogin = () => {
+    window.location.href = `${BASE_API_URL}/upstox-login`;
   };
 
-  const refreshPrices = async () => {
+  // Search Stocks
+  const handleSearch = async (e) => {
+    e.preventDefault();
     try {
-      setLoading(true);
-      const response = await axios.put(`${BASE_URL}/refresh`, {}, { headers: { "x-access-token": token } });
-      setInvestments(response.data.stocks);
-      calculateStats(response.data.stocks);
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${BASE_API_URL}/search?q=${searchQuery}`, {
+        headers: { "x-access-token": token },
+      });
+      if (!res.ok) throw new Error("Failed to search stocks");
+      const results = await res.json();
+      setSearchResults(results);
     } catch (error) {
-      setError("Failed to refresh prices");
-    } finally {
-      setLoading(false);
+      console.error("Error searching stocks:", error);
+      setError(error.message);
     }
   };
 
-  const handleStockAction = async (action) => {
+  // Add Stock
+  const handleAddStock = async (e) => {
+    e.preventDefault();
     try {
-      setLoading(true);
-      const endpoint = action === "sell" ? "sellStock" : "addStock";
-      const response = await axios.post(`${BASE_URL}/${endpoint}`, currentStock, { headers: { "x-access-token": token } });
-      setInvestments(response.data.stocks);
-      calculateStats(response.data.stocks);
-      setShowModal(false);
-      setSuggestions([]);
-      setQuery("");
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${BASE_API_URL}/`, {
+        method: "POST",
+        headers: { "x-access-token": token, "Content-Type": "application/json" },
+        body: JSON.stringify(newStock),
+      });
+      if (!res.ok) throw new Error("Failed to add stock");
+      const data = await res.json();
+      setPortfolioData((prev) => [
+        ...prev,
+        {
+          symbol: data.stock.symbol,
+          netQty: data.stock.quantity,
+          avgPrice: data.stock.purchasePrice,
+          ltp: data.stock.currentPrice,
+          currentValue: data.stock.currentPrice * data.stock.quantity,
+          dayPL: (data.stock.currentPrice - data.stock.purchasePrice) * data.stock.quantity,
+          dayPercentage: ((data.stock.currentPrice - data.stock.purchasePrice) / data.stock.purchasePrice) * 100,
+          overallPL: (data.stock.currentPrice - data.stock.purchasePrice) * data.stock.quantity,
+          overallPercentage: ((data.stock.currentPrice - data.stock.purchasePrice) / data.stock.purchasePrice) * 100,
+          stockId: data.stock._id,
+          sold: false,
+        },
+      ]);
+      setNewStock({ stockName: "", symbol: "", quantity: "", purchasePrice: "" });
+      setSearchResults([]);
     } catch (error) {
-      setError(`Failed to ${action} stock`);
-    } finally {
-      setLoading(false);
-      window.location.reload();
+      console.error("Error adding stock:", error);
+      setError(error.message);
     }
   };
 
-  const activeStocks = investments.filter(stock => !stock.sold);
-  const soldStocks = investments.filter(stock => stock.sold);
+  // Sell Stock
+  const handleSellStock = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${BASE_API_URL}/sell`, {
+        method: "POST",
+        headers: { "x-access-token": token, "Content-Type": "application/json" },
+        body: JSON.stringify(sellStock),
+      });
+      if (!res.ok) throw new Error("Failed to sell stock");
+      const data = await res.json();
+      setPortfolioData((prev) =>
+        prev
+          .map((stock) =>
+            stock.stockId === data.stock._id
+              ? { ...stock, netQty: stock.netQty - data.transaction.quantity, sold: data.stock.sold }
+              : stock
+          )
+          .filter((stock) => !stock.sold)
+      );
+      setSellStock({ stockId: "", quantity: "", salePrice: "" });
+    } catch (error) {
+      console.error("Error selling stock:", error);
+      setError(error.message);
+    }
+  };
 
-  if (loading && investments.length === 0) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-pulse text-gray-600 text-xl font-semibold bg-white p-6 rounded-2xl shadow-md">Loading your portfolio...</div>
-      </div>
-    );
-  }
+  // Sync Portfolio
+  const handleSyncPortfolio = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${BASE_API_URL}/portfolio/sync`, {
+        headers: { "x-access-token": token },
+      });
+      if (!res.ok) throw new Error("Failed to sync portfolio");
+      const data = await res.json();
+      console.log(data.message);
+      const stocksRes = await fetch(`${BASE_API_URL}/`, {
+        headers: { "x-access-token": token },
+      });
+      if (!stocksRes.ok) throw new Error("Failed to refresh stocks after sync");
+      const stocks = await stocksRes.json();
+      const transformedPortfolio = stocks.map((stock) => ({
+        symbol: stock.symbol,
+        netQty: stock.quantity,
+        avgPrice: stock.purchasePrice,
+        ltp: stock.currentPrice,
+        currentValue: stock.currentPrice * stock.quantity,
+        dayPL: (stock.currentPrice - stock.purchasePrice) * stock.quantity,
+        dayPercentage: ((stock.currentPrice - stock.purchasePrice) / stock.purchasePrice) * 100,
+        overallPL: (stock.currentPrice - stock.purchasePrice) * stock.quantity,
+        overallPercentage: ((stock.currentPrice - stock.purchasePrice) / stock.purchasePrice) * 100,
+        stockId: stock._id,
+        sold: stock.sold,
+      }));
+      setPortfolioData(transformedPortfolio.filter((stock) => !stock.sold));
+    } catch (error) {
+      console.error("Error syncing portfolio:", error);
+      setError(error.message);
+    }
+  };
+
+  if (loading) return <div className="p-4 lg:p-6 text-gray-400">Loading...</div>;
+  if (error) return <div className="p-4 lg:p-6 text-red-400">{error}</div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-10 pb-6 border-b border-gray-200">
-          <h1 className="text-4xl font-bold text-gray-900 tracking-tight">Portfolio Tracker</h1>
-          <Button
-            onClick={refreshPrices}
-            className="bg-gradient-to-r from-gray-700 to-gray-900 hover:from-gray-800 hover:to-black text-white rounded-xl py-2.5 px-6 flex items-center transition-all duration-300 shadow-md hover:shadow-xl"
-            disabled={loading}
-          >
-            <RefreshCw className={`w-5 h-5 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh Prices
-          </Button>
-        </div>
+    <div className="p-4 lg:p-6">
+      {/* Upstox Login and Sync Buttons */}
+      <div className="flex space-x-4 mb-6">
+        <button
+          onClick={handleUpstoxLogin}
+          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+        >
+          Connect to Upstox
+        </button>
+        <button
+          onClick={handleSyncPortfolio}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+        >
+          Sync Portfolio
+        </button>
+      </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          {activeTab === "active" ? (
-            <>
-              <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300">
-                <CardHeader className="pb-1">
-                  <CardTitle className="text-sm font-semibold text-blue-700 uppercase tracking-wide">Total Investment</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-gray-900">₹{stats.active.totalInvestment.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300">
-                <CardHeader className="pb-1">
-                  <CardTitle className="text-sm font-semibold text-green-700 uppercase tracking-wide">Current Value</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-gray-900">₹{stats.active.currentValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300">
-                <CardHeader className="pb-1">
-                  <CardTitle className="text-sm font-semibold text-purple-700 uppercase tracking-wide">Unrealized P&L</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`text-2xl font-bold flex items-center justify-center ${stats.active.unrealizedPL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {stats.active.unrealizedPL >= 0 ? <TrendingUp className="w-6 h-6 mr-2" /> : <TrendingDown className="w-6 h-6 mr-2" />}
-                    ₹{Math.abs(stats.active.unrealizedPL).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300">
-                <CardHeader className="pb-1">
-                  <CardTitle className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Active Positions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-gray-900">{stats.active.numberOfStocks}</div>
-                </CardContent>
-              </Card>
-            </>
-          ) : (
-            <>
-              <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300">
-                <CardHeader className="pb-1">
-                  <CardTitle className="text-sm font-semibold text-purple-700 uppercase tracking-wide">Realized P&L</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`text-2xl font-bold flex items-center justify-center ${stats.sold.realizedPL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {stats.sold.realizedPL >= 0 ? <TrendingUp className="w-6 h-6 mr-2" /> : <TrendingDown className="w-6 h-6 mr-2" />}
-                    ₹{Math.abs(stats.sold.realizedPL).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300">
-                <CardHeader className="pb-1">
-                  <CardTitle className="text-sm font-semibold text-blue-700 uppercase tracking-wide">Short Term Gains</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-gray-900">₹{stats.sold.shortTermGains.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300">
-                <CardHeader className="pb-1">
-                  <CardTitle className="text-sm font-semibold text-green-700 uppercase tracking-wide">Long Term Gains</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-gray-900">₹{stats.sold.longTermGains.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300">
-                <CardHeader className="pb-1">
-                  <CardTitle className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Closed Positions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-gray-900">{stats.sold.numberOfStocks}</div>
-                </CardContent>
-              </Card>
-            </>
-          )}
-        </div>
-
-        {/* Search and Error */}
-        <div className="mb-12">
-          <div className="relative max-w-md mx-auto mb-6">
-            <Input
-              type="text"
-              placeholder="Search stocks (e.g., TCS, RELIANCE)"
-              value={query}
-              onChange={handleSearch}
-              className="border border-gray-300 rounded-xl bg-white py-3 px-5 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-300 text-gray-900 placeholder-gray-400"
-            />
-            {suggestions.length > 0 && (
-              <ul className="absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-2xl shadow-xl max-h-64 overflow-auto animate-in fade-in-0 zoom-in-95 duration-300">
-                {suggestions.map((stock) => (
-                  <li
-                    key={stock.Symbol}
-                    className="p-4 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-all duration-200"
-                    onClick={() => {
-                      setCurrentStock({ 
-                        symbol: stock.Symbol,
-                        quantity: 0,
-                        purchasePrice: 0,
-                        purchaseDate: new Date().toISOString().split('T')[0]
-                      });
-                      setShowModal(true);
-                      setSuggestions([]);
-                      setQuery("");
-                    }}
-                  >
-                    <div className="font-semibold text-gray-900">{stock["Company Name"]}</div>
-                    <div className="text-sm text-gray-500">{stock.Symbol}</div>
-                  </li>
-                ))}
-              </ul>
-            )}
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="relative bg-gradient-to-bl from-slate-800/80 via-gray-900/90 to-stone-800/80 p-5 rounded-xl overflow-hidden group">
+          <div className="absolute inset-0 rounded-xl p-[1px] bg-gradient-to-bl from-slate-500/20 via-gray-500/10 to-stone-500/20"></div>
+          <div className="relative z-10">
+            <h3 className="text-gray-400 font-medium mb-1">Total Investments</h3>
+            <div className="text-3xl font-bold">${totalInvestments.toFixed(2)}</div>
+            <div className="flex items-center mt-2 text-green-400">
+              <ArrowUpRight className="h-4 w-4 mr-1" />
+              <span>+2.4%</span>
+              <span className="text-gray-400 text-sm ml-2">this month</span>
+            </div>
           </div>
-
-          {error && (
-            <Alert className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 shadow-md animate-in fade-in-0 duration-300 max-w-md mx-auto">
-              <AlertDescription className="text-red-600 font-semibold text-center">{error}</AlertDescription>
-            </Alert>
-          )}
         </div>
-
-        {/* Tabs */}
-        <div className="mb-8 border-b border-gray-200">
-          <nav className="flex space-x-10">
-            <button
-              onClick={() => setActiveTab("active")}
-              className={`py-4 px-4 border-b-2 font-semibold text-lg transition-all duration-300 ${
-                activeTab === "active"
-                  ? "border-blue-600 text-blue-600 bg-blue-50"
-                  : "border-transparent text-gray-600 hover:text-blue-500 hover:border-blue-300 hover:bg-gray-50"
-              } rounded-t-xl`}
-            >
-              Active Investments ({activeStocks.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("sold")}
-              className={`py-4 px-4 border-b-2 font-semibold text-lg transition-all duration-300 ${
-                activeTab === "sold"
-                  ? "border-blue-600 text-blue-600 bg-blue-50"
-                  : "border-transparent text-gray-600 hover:text-blue-500 hover:border-blue-300 hover:bg-gray-50"
-              } rounded-t-xl`}
-            >
-              Sold Investments ({soldStocks.length})
-            </button>
-          </nav>
-        </div>
-
-        {/* Stock Table */}
-        <div className="bg-white border border-gray-200 rounded-2xl shadow-lg divide-y divide-gray-100 overflow-hidden">
-          {(activeTab === "active" ? activeStocks : soldStocks).map((stock) => (
-            <div key={stock.symbol} className="p-6 hover:bg-gray-50 transition-all duration-300">
-              <div className="grid grid-cols-12 gap-4 items-center">
-                <div className="col-span-4 flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow-md ${
-                    activeTab === "active" ? "bg-gradient-to-br from-blue-500 to-blue-600" : "bg-gradient-to-br from-gray-500 to-gray-600"
-                  }`}>
-                    {stock.stockName.charAt(0)}
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 truncate">{stock.stockName}</h3>
-                    <p className="text-sm text-gray-500 truncate">{stock.symbol}</p>
-                  </div>
-                </div>
-                <div className="col-span-2 text-right">
-                  <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">{activeTab === "active" ? "Current Price" : "Sale Price"}</p>
-                  <p className="text-base font-semibold text-gray-900">
-                    ₹{(activeTab === "active" ? stock.currentPrice : stock.salePrice)?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || "Updating..."}
-                  </p>
-                </div>
-                <div className="col-span-2 text-right">
-                  <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">Quantity</p>
-                  <p className="text-base font-semibold text-gray-900">{stock.quantity}</p>
-                </div>
-                <div className="col-span-2 text-right">
-                  <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">Purchase Price</p>
-                  <p className="text-base font-semibold text-gray-900">₹{stock.purchasePrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-                </div>
-                <div className="col-span-2 flex justify-end space-x-3">
-                  {activeTab === "active" ? (
-                    <>
-                      <Button
-                        onClick={() => {
-                          setCurrentStock({
-                            symbol: stock.symbol,
-                            salePrice: stock.currentPrice,
-                            saleDate: new Date().toISOString().split('T')[0]
-                          });
-                          setShowModal(true);
-                        }}
-                        className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-xl text-sm px-4 py-2 transition-all duration-300 shadow-md hover:shadow-lg"
-                      >
-                        Sell
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          setCurrentStock({
-                            symbol: stock.symbol,
-                            quantity: 0,
-                            purchasePrice: stock.currentPrice,
-                            purchaseDate: new Date().toISOString().split('T')[0]
-                          });
-                          setShowModal(true);
-                        }}
-                        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl text-sm px-4 py-2 transition-all duration-300 shadow-md hover:shadow-lg"
-                      >
-                        Buy More
-                      </Button>
-                    </>
-                  ) : (
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">Profit/Loss</p>
-                      <p className={`text-base font-semibold ${stock.capitalGains >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        ₹{stock.capitalGains?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
+        <div className="relative bg-gradient-to-bl from-blue-900/80 via-gray-900/90 to-steel-800/80 p-5 rounded-xl overflow-hidden group">
+          <div className="absolute inset-0 rounded-xl p-[1px] bg-gradient-to-bl from-blue-600/20 via-steel-500/10 to-gray-500/20"></div>
+          <div className="relative z-10">
+            <h3 className="text-gray-400 font-medium mb-1">Current Value</h3>
+            <div className="text-3xl font-bold">${currentValue.toFixed(2)}</div>
+            <div className="flex items-center mt-2 text-green-400">
+              <ArrowUpRight className="h-4 w-4 mr-1" />
+              <span>+{((currentValue - totalInvestments) / totalInvestments * 100).toFixed(1)}%</span>
+              <span className="text-gray-400 text-sm ml-2">overall</span>
             </div>
-          ))}
-          {(activeTab === "active" ? activeStocks : soldStocks).length === 0 && (
-            <div className="p-12 text-center bg-white">
-              <p className="text-gray-500 text-lg font-medium mb-6">
-                {activeTab === "active" 
-                  ? "No active investments yet. Search above to start building your portfolio!"
-                  : "No sold investments yet. Keep trading to see your history here!"}
-              </p>
-              {activeTab === "active" && (
-                <Button
-                  onClick={() => setQuery("")}
-                  className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl py-3 px-6 transition-all duration-300 shadow-md hover:shadow-xl"
+          </div>
+        </div>
+        <div className="relative bg-gradient-to-bl from-amber-900/80 via-gray-900/90 to-bronze-800/80 p-5 rounded-xl overflow-hidden group">
+          <div className="absolute inset-0 rounded-xl p-[1px] bg-gradient-to-bl from-amber-600/20 via-bronze-500/10 to-gray-500/20"></div>
+          <div className="relative z-10">
+            <h3 className="text-gray-400 font-medium mb-1">Overall P&L</h3>
+            <div className="text-3xl font-bold">${overallPL.toFixed(2)}</div>
+            <div className="flex items-center mt-2 text-green-400">
+              <ArrowUpRight className="h-4 w-4 mr-1" />
+              <span>+{((currentValue - totalInvestments) / totalInvestments * 100).toFixed(1)}%</span>
+              <span className="text-gray-400 text-sm ml-2">all time</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Search and Add Stock */}
+      <div className="mt-6 bg-gray-900 p-5 rounded-xl">
+        <form onSubmit={handleSearch} className="flex items-center mb-4">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search stocks..."
+              className="w-full p-2 bg-gray-800 text-white rounded-lg border border-gray-700 focus:outline-none focus:border-purple-500"
+            />
+            <Search className="absolute right-2 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+          </div>
+          <button type="submit" className="ml-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+            Search
+          </button>
+        </form>
+        {searchResults.length > 0 && (
+          <div className="space-y-2">
+            {searchResults.map((stock) => (
+              <div key={stock.symbol} className="flex justify-between items-center p-2 bg-gray-800 rounded-lg">
+                <span>{stock.stockName} ({stock.symbol})</span>
+                <button
+                  onClick={() => setNewStock({ ...newStock, stockName: stock.stockName, symbol: stock.symbol })}
+                  className="px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
                 >
-                  Start Investing
-                </Button>
-              )}
+                  Select
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Charts and Recommendations */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+        <div className="col-span-2 bg-gray-900 p-5 rounded-xl">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-medium text-white">Portfolio Performance</h3>
+            <div className="flex items-center space-x-2">
+              {["1D", "1W", "1M", "1Y", "All"].map((period) => (
+                <button
+                  key={period}
+                  className={`px-3 py-1 text-sm rounded-md transition-all duration-200 ${
+                    period === "1M" ? "bg-purple-600 text-purple-200" : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                  }`}
+                >
+                  {period}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
+          <div className="h-96">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={stockData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                <XAxis dataKey="name" stroke="#4b5563" />
+                <YAxis stroke="#4b5563" />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#1e1e2d",
+                    borderColor: "#374151",
+                    borderRadius: "0.5rem",
+                    boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#8b5cf6"
+                  strokeWidth={2}
+                  dot={{ r: 4, strokeWidth: 2 }}
+                  activeDot={{ r: 6, strokeWidth: 2 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
-        {/* Modal */}
-        <Dialog open={showModal} onOpenChange={setShowModal}>
-          <DialogContent className="bg-white border border-gray-200 rounded-2xl shadow-2xl p-8 max-w-md animate-in fade-in-0 zoom-in-95 duration-300">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-bold text-gray-900 tracking-tight">
-                {currentStock.salePrice ? "Sell Stock" : "Add Stock"}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-6 mt-6">
-              {!currentStock.salePrice && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="quantity" className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Quantity</Label>
-                    <Input
-                      id="quantity"
-                      type="number"
-                      value={currentStock.quantity}
-                      onChange={(e) => setCurrentStock({ ...currentStock, quantity: e.target.value })}
-                      className="border border-gray-300 rounded-xl bg-white py-3 px-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-300 text-gray-900 placeholder-gray-400"
-                      placeholder="Enter quantity"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="purchasePrice" className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Purchase Price (₹)</Label>
-                    <Input
-                      id="purchasePrice"
-                      type="number"
-                      value={currentStock.purchasePrice}
-                      onChange={(e) => setCurrentStock({ ...currentStock, purchasePrice: e.target.value })}
-                      className="border border-gray-300 rounded-xl bg-white py-3 px-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-300 text-gray-900 placeholder-gray-400"
-                      placeholder="Enter purchase price"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="purchaseDate" className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Purchase Date</Label>
-                    <Input
-                      id="purchaseDate"
-                      type="date"
-                      value={currentStock.purchaseDate}
-                      onChange={(e) => setCurrentStock({ ...currentStock, purchaseDate: e.target.value })}
-                      className="border border-gray-300 rounded-xl bg-white py-3 px-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-300 text-gray-900"
-                    />
-                  </div>
-                </>
-              )}
-              {currentStock.salePrice && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="salePrice" className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Sale Price (₹)</Label>
-                    <Input
-                      id="salePrice"
-                      type="number"
-                      value={currentStock.salePrice}
-                      onChange={(e) => setCurrentStock({ ...currentStock, salePrice: e.target.value })}
-                      className="border border-gray-300 rounded-xl bg-white py-3 px-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-300 text-gray-900 placeholder-gray-400"
-                      placeholder="Enter sale price"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="saleDate" className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Sale Date</Label>
-                    <Input
-                      id="saleDate"
-                      type="date"
-                      value={currentStock.saleDate}
-                      onChange={(e) => setCurrentStock({ ...currentStock, saleDate: e.target.value })}
-                      className="border border-gray-300 rounded-xl bg-white py-3 px-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-300 text-gray-900"
-                    />
-                  </div>
-                </>
-              )}
+        <div className="relative bg-gradient-to-bl from-fuchsia-900/50 via-gray-900/80 to-purple-900/50 p-5 rounded-xl overflow-hidden">
+          <div className="absolute inset-0 rounded-xl p-[1px] bg-gradient-to-bl from-fuchsia-500/20 via-pink-500/10 to-purple-500/20"></div>
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-medium flex items-center">
+                <Zap className="h-4 w-4 mr-2 text-yellow-400" />
+                AI Recommendations
+              </h3>
             </div>
-            <DialogFooter className="mt-8 flex justify-end space-x-4">
-              <Button
-                onClick={() => {
-                  setShowModal(false);
-                  setSuggestions([]);
-                  setQuery("");
+            <div className="space-y-4">
+              {aiRecommendations.map((rec, index) => (
+                <div
+                  key={index}
+                  className="relative bg-white/5 rounded-lg p-4 border border-white/5 hover:border-purple-500/30 transition-all duration-200 overflow-hidden group"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-fuchsia-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div className="relative z-10">
+                    <div className="flex items-start justify-between">
+                      <h4 className="font-medium text-white">{rec.title}</h4>
+                      <Star className="h-4 w-4 text-yellow-400" />
+                    </div>
+                    <p className="text-sm text-gray-400 mt-1">{rec.description}</p>
+                    <button className="mt-3 text-sm text-purple-400 hover:text-purple-300 transition-colors flex items-center">
+                      {rec.action}
+                      <ArrowUpRight className="h-3 w-3 ml-1" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Monthly Spending */}
+      <div className="bg-gray-900 p-5 rounded-xl mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-medium text-white">Monthly Spending</h3>
+          <div className="relative">
+            <button className="flex items-center space-x-1 bg-gray-800 px-3 py-1.5 rounded-lg text-sm text-gray-300">
+              <span>Last 30 days</span>
+              <ChevronDown className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={monthlySpending}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+              <XAxis dataKey="name" stroke="#4b5563" />
+              <YAxis stroke="#4b5563" />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "#1e1e2d",
+                  borderColor: "#374151",
+                  borderRadius: "0.5rem",
                 }}
-                className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl py-2.5 px-6 transition-all duration-300 shadow-md hover:shadow-lg"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={() => handleStockAction(currentStock.salePrice ? "sell" : "add")}
-                className={`${
-                  currentStock.salePrice 
-                    ? "bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800" 
-                    : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
-                } text-white rounded-xl py-2.5 px-6 transition-all duration-300 shadow-md hover:shadow-xl`}
-                disabled={loading}
-              >
-                {loading ? "Processing..." : currentStock.salePrice ? "Sell" : "Add"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="amount"
+                name="Spending"
+                stroke="#6366f1"
+                strokeWidth={2}
+                dot={{ r: 4, strokeWidth: 2 }}
+                activeDot={{ r: 6, strokeWidth: 2 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Portfolio Table */}
+      <div className="relative bg-gradient-to-bl from-violet-900/50 via-gray-900/80 to-purple-900/50 p-5 rounded-xl overflow-hidden mt-6">
+        <div className="absolute inset-0 rounded-xl p-[1px] bg-gradient-to-bl from-violet-500/20 via-purple-500/10 to-indigo-500/20"></div>
+        <div className="relative z-10">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-medium">Portfolio Holdings</h3>
+            <button className="text-sm text-purple-400 hover:text-purple-300 transition-colors">View All</button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="text-left text-gray-400 text-sm border-b border-white/10">
+                  <th className="pb-3 font-medium">Symbol</th>
+                  <th className="pb-3 font-medium">Net Qty</th>
+                  <th className="pb-3 font-medium">Avg Price</th>
+                  <th className="pb-3 font-medium">LTP</th>
+                  <th className="pb-3 font-medium">Current Value</th>
+                  <th className="pb-3 font-medium">Day P&L</th>
+                  <th className="pb-3 font-medium">Day %</th>
+                  <th className="pb-3 font-medium">Overall P&L</th>
+                  <th className="pb-3 font-medium">Overall %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {portfolioData.map((stock, index) => (
+                  <tr key={index} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                    <td className="py-3 font-medium">{stock.symbol}</td>
+                    <td className="py-3">{stock.netQty}</td>
+                    <td className="py-3">${stock.avgPrice.toFixed(2)}</td>
+                    <td className="py-3">${stock.ltp.toFixed(2)}</td>
+                    <td className="py-3">${stock.currentValue.toFixed(2)}</td>
+                    <td className={`py-3 ${stock.dayPL >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {stock.dayPL >= 0 ? "+" : ""}{stock.dayPL.toFixed(2)}
+                    </td>
+                    <td className={`py-3 ${stock.dayPercentage >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {stock.dayPercentage >= 0 ? "+" : ""}{stock.dayPercentage.toFixed(2)}%
+                    </td>
+                    <td className={`py-3 ${stock.overallPL >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {stock.overallPL >= 0 ? "+" : ""}{stock.overallPL.toFixed(2)}
+                    </td>
+                    <td className={`py-3 ${stock.overallPercentage >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {stock.overallPercentage >= 0 ? "+" : ""}{stock.overallPercentage.toFixed(2)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );
-};
-
-export default StockApp;
+}

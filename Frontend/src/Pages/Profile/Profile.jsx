@@ -42,7 +42,7 @@ const Profile = () => {
 
     const fetchProfile = async () => {
       try {
-        const response = await fetch('http://localhost:3000/api/profile', {
+        const response = await fetch('http://localhost:3000/profile', {
           headers: { 'x-access-token': token },
         });
         const data = await response.json();
@@ -72,7 +72,7 @@ const Profile = () => {
     const form = e.target;
 
     try {
-      const response = await fetch('http://localhost:3000/api/profile/edit', {
+      const response = await fetch('http://localhost:3000/profile/edit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-access-token': token },
         body: JSON.stringify({
@@ -100,7 +100,7 @@ const Profile = () => {
   const handleChangePassword = async () => {
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch('http://localhost:3000/api/profile/changePassword', {
+      const response = await fetch('http://localhost:3000/profile/changePassword', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-access-token': token },
         body: JSON.stringify({

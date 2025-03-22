@@ -1,98 +1,178 @@
-const Tax = require("../Model/Tax");
-const User = require("../Model/User");
+const Tax = require("../model/Tax");
+const User = require("../model/User");
 const jwt = require("jsonwebtoken");
 
-const getTax = async (req, res) => {
+const getTaxSlabs = (year) => {
+  const taxSlabs = {
+    2026: { slab1: 250000, slab2: 500000, slab3: 1000000 },
+    2025: { slab1: 250000, slab2: 500000, slab3: 1000000 },
+    2024: { slab1: 250000, slab2: 500000, slab3: 1000000 },
+  };
+  return taxSlabs[year] || taxSlabs[2024];
+};
+
+const calculateTax = (
+  income,
+  deductions,
+  LTCG,
+  STCG,
+  dividendIncome,
+  taxYear
+) => {
+  let taxableIncome = income - deductions;
+  const { slab1, slab2, slab3 } = getTaxSlabs(taxYear);
+
+  let LTCG_Tax = LTCG > 100000 ? (LTCG - 100000) * 0.1 : 0;
+  let STCG_Tax = STCG * 0.15;
+  let dividendTax = dividendIncome * 0.1;
+
+  let totalTax = 0;
+
+  if (taxableIncome <= slab1) totalTax = 0;
+  else if (taxableIncome <= slab2) totalTax = (taxableIncome - slab1) * 0.05;
+  else if (taxableIncome <= slab3)
+    totalTax = 12500 + (taxableIncome - slab2) * 0.2;
+  else totalTax = 112500 + (taxableIncome - slab3) * 0.3;
+
+  return totalTax + LTCG_Tax + STCG_Tax + dividendTax;
+};
+
+const createOrUpdateTax = async (req, res) => {
   try {
     const token = req.headers["x-access-token"];
     if (!token) return res.status(401).json({ message: "No token provided" });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const email = decoded.email;
-    const userId = await User.findOne({ email }).select("-password");
+    const user = await User.findOne({ email }).select("-password");
 
-    if (!userId) return res.status(401).json({ message: "No user is present" });
+    if (!user) return res.status(401).json({ message: "User not found" });
 
-    const tax = await Tax.findOne({ userId: userId._id });
+    const {
+      taxYear,
+      userIncome,
+      userDeductions,
+      longTermCapitalGains,
+      shortTermCapitalGains,
+      dividendIncome,
+    } = req.body;
 
-    if (!tax) return res.status(401).json({ message: "No tax details found" });
+    const currentTax = calculateTax(
+      userIncome,
+      userDeductions,
+      longTermCapitalGains,
+      shortTermCapitalGains,
+      dividendIncome,
+      taxYear
+    );
 
-    return res.status(200).json({ tax });
+    let taxRecord = await Tax.findOne({ userId: user._id, taxYear });
+
+    if (taxRecord) {
+      taxRecord.userIncome = userIncome;
+      taxRecord.userDeductions = userDeductions;
+      taxRecord.longTermCapitalGains = longTermCapitalGains;
+      taxRecord.shortTermCapitalGains = shortTermCapitalGains;
+      taxRecord.dividendIncome = dividendIncome;
+      taxRecord.currentTax = currentTax;
+      taxRecord.lastUpdated = Date.now();
+      await taxRecord.save();
+      return res.status(200).json({ message: "Tax record updated", taxRecord });
+    } else {
+      const newTax = new Tax({
+        userId: user._id,
+        taxYear,
+        userIncome,
+        userDeductions,
+        longTermCapitalGains,
+        shortTermCapitalGains,
+        dividendIncome,
+        currentTax,
+      });
+      await newTax.save();
+      return res
+        .status(201)
+        .json({ message: "Tax record created", tax: newTax });
+    }
   } catch (error) {
-    return res.status(500).json({ message: error });
+    return res.status(500).json({ error: error.message });
   }
 };
 
-const addTax = async (req, res) => {
-    try {
-        const token = req.headers["x-access-token"];
-        if (!token) return res.status(401).json({ message: "No token provided" });
+const getUserTaxRecords = async (req, res) => {
+  try {
+    const token = req.headers["x-access-token"];
+    if (!token) return res.status(401).json({ message: "No token provided" });
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const email = decoded.email;
-        const user = await User.findOne({ email }).select("-password");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const email = decoded.email;
+    const user = await User.findOne({ email }).select("-password");
 
-        if (!user) return res.status(401).json({ message: "No user found" });
+    if (!user) return res.status(401).json({ message: "User not found" });
 
-        const existingTax = await Tax.findOne({ userId: user._id });
-        if (existingTax) return res.status(400).json({ message: "Tax details already exist" });
-
-        const newTax = new Tax({ ...req.body, userId: user._id });
-        await newTax.save();
-
-        return res.status(201).json({ message: "Tax details added successfully", data: newTax });
-    } catch (error) {
-        console.error("Error adding tax details:", error);
-        return res.status(500).json({ message: "Internal server error", error: error.message });
-    }
+    const taxRecords = await Tax.find({ userId: user._id });
+    return res.status(200).json(taxRecords);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 };
 
-const deleteTax = async (req, res) => {
-    try {
-        const token = req.headers["x-access-token"];
-        if (!token) return res.status(401).json({ message: "No token provided" });
+const getTaxByYear = async (req, res) => {
+  try {
+    const token = req.headers["x-access-token"];
+    if (!token) return res.status(401).json({ message: "No token provided" });
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const email = decoded.email;
-        const user = await User.findOne({ email }).select("-password");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const email = decoded.email;
+    const user = await User.findOne({ email }).select("-password");
 
-        if (!user) return res.status(401).json({ message: "No user found" });
+    if (!user) return res.status(401).json({ message: "User not found" });
 
-        const tax = await Tax.findOne({ userId: user._id });
-        if (!tax) return res.status(400).json({ message: "No tax details found" });
+    const { taxYear } = req.params;
 
-        await Tax.findByIdAndDelete(tax._id);
+    const taxRecord = await Tax.findOne({ userId: user._id, taxYear });
 
-        return res.status(200).json({ message: "Tax details deleted successfully" });
-    } catch (error) {
-        console.error("Error deleting tax details:", error);
-        return res.status(500).json({ message: "Internal server error", error: error.message });
-    }
+    if (!taxRecord)
+      return res
+        .status(404)
+        .json({ error: "No tax record found for this year" });
+
+    return res.status(200).json(taxRecord);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 };
 
-const updateTax = async (req, res) => {
-    try {
-        const token = req.headers["x-access-token"];
-        if (!token) return res.status(401).json({ message: "No token provided" });
+const deleteTaxRecord = async (req, res) => {
+  try {
+    const token = req.headers["x-access-token"];
+    if (!token) return res.status(401).json({ message: "No token provided" });
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const email = decoded.email;
-        const user = await User.findOne({ email }).select("-password");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const email = decoded.email;
+    const user = await User.findOne({ email }).select("-password");
 
-        if (!user) return res.status(401).json({ message: "No user found" });
+    if (!user) return res.status(401).json({ message: "User not found" });
 
-        const tax = await Tax.findOne({ userId: user._id });
-        if (!tax) return res.status(400).json({ message: "No tax details found" });
+    const { taxYear } = req.params;
 
-        await Tax.findByIdAndUpdate(tax._id, req.body);
+      const deletedTax = await Tax.findOneAndDelete({
+      userId: user._id,
+      taxYear,
+    });
 
-        return res.status(200).json({ message: "Tax details updated successfully" });
-    } catch (error) {
-        console.error("Error updating tax details:", error);
-        return res.status(500).json({ message: "Internal server error", error: error.message });
-    }
-}
+    if (!deletedTax)
+      return res.status(404).json({ error: "No tax record found" });
+
+    return res.status(200).json({ message: "Tax record deleted successfully" });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
 
 module.exports = {
-    getTax, addTax, deleteTax, updateTax
+  createOrUpdateTax,
+  getUserTaxRecords,
+  getTaxByYear,
+  deleteTaxRecord,
 };

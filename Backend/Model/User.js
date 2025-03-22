@@ -9,6 +9,7 @@ const userSchema = new mongoose.Schema({
   investmentGoal: { type: String, enum: ["Retirement", "Education", "Marriage", "Travel", "Others"], default: "Retirement" },
   monthlyIncome: { type: Number, default: 0 },
   currentBalance: { type: Number, default: 0 },
+  upstoxAccessToken: { type: String },
   chatHistory: [{ type: mongoose.Schema.Types.ObjectId, ref: "Chat" }],
 }, { timestamps: true });
 

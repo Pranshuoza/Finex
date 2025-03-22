@@ -7,6 +7,7 @@ const transactionSchema = new mongoose.Schema({
   quantity: { type: Number, required: true },
   transactionDate: { type: Date, required: true },
   transactionAmount: { type: Number, required: true },
+  upstoxOrderId: { type: String } // Store Upstox order ID
 }, { timestamps: true });
 
 module.exports = mongoose.models.Transaction || mongoose.model('Transaction', transactionSchema);

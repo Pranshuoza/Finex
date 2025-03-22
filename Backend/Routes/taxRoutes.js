@@ -1,10 +1,11 @@
-const express = require('express'); 
-const router = express.Router();    
-const { getTax, addTax, deleteTax, updateTax } =require('../Controller/taxController');
+const express = require("express");
+const { createOrUpdateTax, getUserTaxRecords, getTaxByYear, deleteTaxRecord } = require("../Controller/taxController");
 
-router.get('/', getTax);
-router.post('/add', addTax);
-router.delete('/delete', deleteTax);
-router.put('/update', updateTax);
+const router = express.Router();
+
+router.post("/", createOrUpdateTax);
+router.get("/", getUserTaxRecords);
+router.get("/:taxYear", getTaxByYear);
+router.delete("/:taxYear", deleteTaxRecord);
 
 module.exports = router;

@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Home, MessageSquare, User, TrendingUp, FileText, LogOut } from "lucide-react";
+import { Home, MessageSquare, User, TrendingUp, FileText, LogOut, Bot } from "lucide-react";
 
 const Sidebar = () => {
   const location = useLocation();
@@ -11,7 +11,8 @@ const Sidebar = () => {
     { name: "Dashboard", href: "/", icon: Home },
     { name: "Future Goals", href: "/goals", icon: TrendingUp },
     { name: "Tax", href: "/tax", icon: FileText },
-    { name: "Chatbot", href: "/chatbot", icon: MessageSquare },
+    { name: "Chatbot", href: "/chatbot", icon: Bot },
+    {name: "Community", href: "/community", icon: MessageSquare},
     { name: "Profile", href: "/profile", icon: User },
   ];
 

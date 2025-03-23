@@ -1,20 +1,27 @@
 const Tax = require("../Model/Tax");
 const User = require("../Model/User");
+const jwt = require("jsonwebtoken");
 
-// Fixed deductions for each year (Assumption based on Indian tax rules)
-const standardDeductions = {
-  2024: 50000,  // ₹50,000 standard deduction
-  2025: 60000,  // ₹60,000 standard deduction
+// Middleware to verify token
+const verifyToken = (req, res, next) => {
+  const token = req.headers["x-access-token"];
+  if (!token) return res.status(403).json({ error: "No token provided" });
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) return res.status(401).json({ error: "Unauthorized" });
+    req.userId = decoded.id; // Assuming the token contains the user ID
+    next();
+  });
 };
 
-// Function to calculate tax
+// Tax calculation logic
 const calculateTax = (income, capitalGainsLT, capitalGainsST, dividendIncome, year) => {
   const taxSlabs = {
     2024: [
       { min: 0, max: 300000, rate: 0 },
-      { min: 300000, max: 700000, rate: 5 },
-      { min: 700000, max: 1000000, rate: 10 },
-      { min: 1000000, max: 1200000, rate: 15 },
+      { min: 300000, max: 600000, rate: 5 },
+      { min: 600000, max: 900000, rate: 10 },
+      { min: 900000, max: 1200000, rate: 15 },
       { min: 1200000, max: 1500000, rate: 20 },
       { min: 1500000, max: Infinity, rate: 30 },
     ],
@@ -29,52 +36,75 @@ const calculateTax = (income, capitalGainsLT, capitalGainsST, dividendIncome, ye
     ],
   };
 
-  if (!taxSlabs[year]) throw new Error("Invalid tax year provided");
+  const standardDeductions = { 2024: 75000, 2025: 75000 };
+  const rebates = {
+    2024: { maxIncome: 700000, maxRebate: 25000 },
+    2025: { maxIncome: 1200000, maxRebate: 60000 },
+  };
 
-  // Apply standard deduction
-  let taxableIncome = income - (standardDeductions[year] || 0);
-  taxableIncome = Math.max(0, taxableIncome); // Ensure it's not negative
+  if (!taxSlabs[year]) throw new Error("Invalid tax year");
 
-  let tax = 0;
+  let taxableIncome = Math.max(0, income - (standardDeductions[year] || 0));
+  let incomeTax = 0;
   for (const slab of taxSlabs[year]) {
     if (taxableIncome > slab.min) {
       const taxableAmount = Math.min(taxableIncome, slab.max) - slab.min;
-      tax += (taxableAmount * slab.rate) / 100;
+      incomeTax += (taxableAmount * slab.rate) / 100;
     }
   }
 
-  // Capital Gains Tax
-  let ltTax = (capitalGainsLT * 10) / 100;
-  let stTax = (capitalGainsST * 15) / 100;
+  let rebate = taxableIncome <= rebates[year].maxIncome ? Math.min(incomeTax, rebates[year].maxRebate) : 0;
+  incomeTax = Math.max(0, incomeTax - rebate);
 
-  // Dividend Tax (only if income exceeds ₹10,00,000)
-  let dividendTax = dividendIncome > 1000000 ? (dividendIncome * 10) / 100 : 0;
+  let ltcgTax = (capitalGainsLT * 10) / 100; // 10% LTCG tax
+  let stcgTax = (capitalGainsST * 15) / 100; // 15% STCG tax
+  let dividendTax = 0; // Dividend income is tax-free
 
-  // Total Tax Calculation
-  let totalTax = tax + ltTax + stTax + dividendTax;
-  let cess = totalTax * 0.04; // 4% cess
+  let totalTax = incomeTax + ltcgTax + stcgTax + dividendTax;
+  let cess = totalTax * 0.04;
 
-  return { totalTax, cess, currentTax: totalTax + cess };
+  return {
+    incomeTax,
+    ltcgTax,
+    stcgTax,
+    dividendTax,
+    totalTax,
+    cess,
+    currentTax: totalTax + cess,
+  };
 };
 
-// Create Tax Record
+// Calculate tax route
+const calculateTaxRoute = async (req, res) => {
+  try {
+    const { userIncome, longTermCapitalGains, shortTermCapitalGains, dividendIncome, taxYear } = req.body;
+    const taxDetails = calculateTax(
+      userIncome,
+      longTermCapitalGains,
+      shortTermCapitalGains,
+      dividendIncome,
+      taxYear
+    );
+    res.status(200).json({ message: "Tax calculated", data: taxDetails });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Create tax record
 const createTaxRecord = async (req, res) => {
   try {
-    const { userId, taxYear, userIncome, longTermCapitalGains, shortTermCapitalGains, dividendIncome } = req.body;
-
-    // Check if user exists
+    const { taxYear, userIncome, longTermCapitalGains, shortTermCapitalGains, dividendIncome } = req.body;
+    const userId = req.userId; // Extracted from token
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    // Calculate tax
     const taxDetails = calculateTax(userIncome, longTermCapitalGains, shortTermCapitalGains, dividendIncome, taxYear);
-
-    // Save tax record
     const newTax = new Tax({
       userId,
       taxYear,
       userIncome,
-      userDeductions: standardDeductions[taxYear] || 0, // Use fixed deduction
+      userDeductions: 75000, // Standard deduction
       longTermCapitalGains,
       shortTermCapitalGains,
       dividendIncome,
@@ -82,35 +112,51 @@ const createTaxRecord = async (req, res) => {
     });
 
     await newTax.save();
-    res.status(201).json({ message: "Tax record created successfully", data: newTax });
+    res.status(201).json({ message: "Tax record created", data: newTax });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// Get All Tax Records
+// Get all tax records for a user
 const getAllTaxRecords = async (req, res) => {
   try {
-    const taxRecords = await Tax.find().populate("userId", "name email");
-    res.status(200).json({ message: "All tax records", data: taxRecords });
+    const userId = req.userId; // Extracted from token
+    const taxRecords = await Tax.find({ userId }).populate("userId", "name email");
+    if (!taxRecords.length) return res.status(404).json({ message: "No tax records found" });
+
+    let totalIncome = 0, totalTaxPaid = 0, totalCessPaid = 0;
+    taxRecords.forEach((record) => {
+      totalIncome += record.userIncome;
+      totalTaxPaid += record.currentTax;
+      totalCessPaid += record.currentTax * 0.04;
+    });
+
+    const summary = {
+      totalIncome,
+      totalTaxPaid,
+      totalCessPaid,
+      totalAmountPaid: totalTaxPaid + totalCessPaid,
+      taxHistory: taxRecords,
+    };
+
+    res.status(200).json({ message: "Tax records retrieved", data: summary });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// Update Tax Record
+// Update tax record
 const updateTaxRecord = async (req, res) => {
   try {
     const { userIncome, longTermCapitalGains, shortTermCapitalGains, dividendIncome, taxYear } = req.body;
-
-    // Recalculate tax
     const taxDetails = calculateTax(userIncome, longTermCapitalGains, shortTermCapitalGains, dividendIncome, taxYear);
 
     const updatedRecord = await Tax.findByIdAndUpdate(
       req.params.id,
       {
         userIncome,
-        userDeductions: standardDeductions[taxYear] || 0, // Use fixed deduction
+        userDeductions: 75000,
         longTermCapitalGains,
         shortTermCapitalGains,
         dividendIncome,
@@ -122,46 +168,35 @@ const updateTaxRecord = async (req, res) => {
     );
 
     if (!updatedRecord) return res.status(404).json({ error: "Tax record not found" });
-
     res.status(200).json({ message: "Tax record updated", data: updatedRecord });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// Delete Tax Record
+// Delete tax record
 const deleteTaxRecord = async (req, res) => {
   try {
     const deletedRecord = await Tax.findByIdAndDelete(req.params.id);
     if (!deletedRecord) return res.status(404).json({ error: "Tax record not found" });
-
-    res.status(200).json({ message: "Tax record deleted successfully" });
+    res.status(200).json({ message: "Tax record deleted" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// Get Total Tax Summary for User
+// Get total tax summary
 const getTotalTax = async (req, res) => {
   try {
-    const { userId } = req.params;
-
-    // Find all tax records for the user
+    const userId = req.userId; // Extracted from token
     const taxRecords = await Tax.find({ userId });
+    if (!taxRecords.length) return res.status(404).json({ message: "No tax records found" });
 
-    if (!taxRecords.length) {
-      return res.status(404).json({ message: "No tax records found for this user" });
-    }
-
-    // Calculate total values
-    let totalIncome = 0;
-    let totalTaxPaid = 0;
-    let totalCessPaid = 0;
-
+    let totalIncome = 0, totalTaxPaid = 0, totalCessPaid = 0;
     taxRecords.forEach((record) => {
       totalIncome += record.userIncome;
       totalTaxPaid += record.currentTax;
-      totalCessPaid += record.currentTax * 0.04; // 4% cess
+      totalCessPaid += record.currentTax * 0.04;
     });
 
     const totalSummary = {
@@ -172,16 +207,17 @@ const getTotalTax = async (req, res) => {
       totalAmountPaid: totalTaxPaid + totalCessPaid,
     };
 
-    res.status(200).json({ message: "Total Tax Summary", data: totalSummary });
+    res.status(200).json({ message: "Complete tax summary", data: totalSummary });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
 module.exports = {
-  createTaxRecord,
-  getAllTaxRecords,
-  updateTaxRecord,
-  deleteTaxRecord,
-  getTotalTax,
+  calculateTaxRoute: [verifyToken, calculateTaxRoute],
+  createTaxRecord: [verifyToken, createTaxRecord],
+  getAllTaxRecords: [verifyToken, getAllTaxRecords],
+  updateTaxRecord: [verifyToken, updateTaxRecord],
+  deleteTaxRecord: [verifyToken, deleteTaxRecord],
+  getTotalTax: [verifyToken, getTotalTax],
 };

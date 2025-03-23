@@ -1,26 +1,15 @@
-"use client";
-
 import { useState, useEffect } from "react";
 import {
   Calculator,
-  DollarSign,
-  TrendingUp,
-  ArrowUpRight,
-  Zap,
-  PieChart,
-  BarChart4,
   FileText,
   Download,
   Info,
   AlertCircle,
   CheckCircle2,
-  Clock,
-  Lightbulb,
 } from "lucide-react";
 import { Button } from "../../Components/ui/button";
 import { Input } from "../../Components/ui/input";
 import { Progress } from "../../Components/ui/progress";
-import { Badge } from "../../Components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../Components/ui/tabs";
 import {
   Select,
@@ -35,93 +24,61 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../../Components/ui/tooltip";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "../../Components/ui/accordian";
 
-// Mock API calls for demo purposes
-const mockApiCall = (endpoint, data = null) => {
+// API base URL
+const BASE_URL = "http://localhost:3000/tax";
+
+// API calls with token
+const fetchTaxRecords = async () => {
+  const token = localStorage.getItem("x-access-token");
+  const response = await fetch(`${BASE_URL}/records`, {
+    headers: { "x-access-token": token },
+  });
+  return response.json();
+};
+
+const calculateTax = async (taxData) => {
+  const token = localStorage.getItem("x-access-token");
+  const response = await fetch(`${BASE_URL}/calculate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-access-token": token,
+    },
+    body: JSON.stringify(taxData),
+  });
+  return response.json();
+};
+
+// Mock Gemini SDK for tax-saving suggestions
+const fetchGeminiTaxSuggestion = async (taxData) => {
   return new Promise((resolve) => {
     setTimeout(() => {
-      resolve({ success: true, data: { endpoint, data } });
+      const { userIncome, longTermCapitalGains, shortTermCapitalGains, dividendIncome } = taxData;
+      const totalIncome = userIncome + longTermCapitalGains + shortTermCapitalGains + dividendIncome;
+
+      let suggestion = "";
+      if (userIncome > 1000000) {
+        suggestion += "Invest in ELSS funds to claim ₹1.5L deduction under Section 80C.\n";
+      } else {
+        suggestion += "Maximize Section 80C deductions up to ₹1.5L with PPF or NSC.\n";
+      }
+
+      if (longTermCapitalGains > 100000) {
+        suggestion += "Offset LTCG by booking losses or reinvesting in Section 54 assets.";
+      } else if (shortTermCapitalGains > 0) {
+        suggestion += "Reduce STCG tax by holding assets longer for LTCG benefits.";
+      } else {
+        suggestion += "Maintain current strategy; no immediate tax-saving needed.";
+      }
+
+      resolve(suggestion.trim());
     }, 1000);
   });
 };
 
-// AI Tax Recommendations
-const generateTaxRecommendations = (taxData) => {
-  if (!taxData) return [];
-
-  const recommendations = [];
-
-  // LTCG vs STCG recommendation
-  if (taxData.stcgTax > 5000 && taxData.taxRate > 0.15) {
-    recommendations.push({
-      title: "Optimize Short-Term Capital Gains",
-      description:
-        "Consider holding investments for over a year to benefit from lower long-term capital gains tax rates.",
-      impact: "Reduce tax liability on short-term gains.",
-      priority: "High",
-      icon: FileText,
-    });
-  }
-
-  // Tax-saving investments recommendation
-  if (taxData.incomeTax > 50000) {
-    recommendations.push({
-      title: "Invest in Tax-Saving Instruments",
-      description:
-        "Utilize Section 80C to invest in ELSS, PPF, or NSC to reduce taxable income.",
-      impact: "Save up to ₹1.5 lakh in taxable income.",
-      priority: "High",
-      icon: FileText,
-    });
-  }
-
-  // Home loan recommendation
-  if (taxData.taxRate >= 0.2) {
-    recommendations.push({
-      title: "Home Loan Interest Deduction",
-      description:
-        "Claim deductions on home loan interest under Section 24(b) up to ₹2 lakh annually.",
-      impact: "Significant tax savings for homeowners.",
-      priority: "Medium",
-      icon: FileText,
-    });
-  }
-
-  // Dividend strategy
-  if (taxData.dividendTax > 10000) {
-    recommendations.push({
-      title: "Dividend Reinvestment Plan",
-      description:
-        "Opt for dividend reinvestment plans to defer tax liability and grow investments.",
-      impact: "Reduce immediate tax burden on dividends.",
-      priority: "Medium",
-      icon: FileText,
-    });
-  }
-
-  // Health insurance recommendation
-  recommendations.push({
-    title: "Health Insurance Deduction",
-    description:
-      "Invest in health insurance to claim deduction under Section 80D up to ₹25,000 for self and family, plus ₹50,000 for parents.",
-    impact: `Save up to ₹${Math.round(
-      (75000 * taxData.taxRate) / 100
-    )} annually.`,
-    priority: "Medium",
-    icon: FileText,
-  });
-
-  return recommendations;
-};
-
-export default function TaxCalculator() {
-  const [userId, setUserId] = useState("user123");
+export default function FinancialCalculators() {
+  // Tax Calculator State
   const [taxYear, setTaxYear] = useState("2024");
   const [userIncome, setUserIncome] = useState(1200000);
   const [longTermCapitalGains, setLongTermCapitalGains] = useState(200000);
@@ -129,922 +86,1028 @@ export default function TaxCalculator() {
   const [dividendIncome, setDividendIncome] = useState(50000);
   const [taxResult, setTaxResult] = useState(null);
   const [taxRecords, setTaxRecords] = useState(null);
-  const [isCalculating, setIsCalculating] = useState(false);
+  const [taxSuggestion, setTaxSuggestion] = useState(null);
+  const [isCalculatingTax, setIsCalculatingTax] = useState(false);
   const [isFetchingRecords, setIsFetchingRecords] = useState(false);
-  const [recommendations, setRecommendations] = useState([]);
-  const [activeTab, setActiveTab] = useState("calculator");
+  const [isFetchingSuggestion, setIsFetchingSuggestion] = useState(false);
+
+  // FD Calculator State
+  const [fdAmount, setFdAmount] = useState(100000);
+  const [fdRate, setFdRate] = useState(6.5);
+  const [fdTenure, setFdTenure] = useState(5);
+  const [fdResult, setFdResult] = useState(null);
+
+  // Loan Calculator State
+  const [loanAmount, setLoanAmount] = useState(500000);
+  const [loanRate, setLoanRate] = useState(8.5);
+  const [loanTenure, setLoanTenure] = useState(10);
+  const [loanResult, setLoanResult] = useState(null);
+
+  // Compound Interest Calculator State
+  const [ciPrincipal, setCiPrincipal] = useState(10000);
+  const [ciRate, setCiRate] = useState(5);
+  const [ciTime, setCiTime] = useState(3);
+  const [ciResult, setCiResult] = useState(null);
+
+  // NPS Calculator State
+  const [npsAmount, setNpsAmount] = useState(50000);
+  const [npsRate, setNpsRate] = useState(10);
+  const [npsTenure, setNpsTenure] = useState(20);
+  const [npsResult, setNpsResult] = useState(null);
+
+  // RD Calculator State
+  const [rdAmount, setRdAmount] = useState(5000);
+  const [rdRate, setRdRate] = useState(6);
+  const [rdTenure, setRdTenure] = useState(5);
+  const [rdResult, setRdResult] = useState(null);
+
+  // PPF Calculator State
+  const [ppfAmount, setPpfAmount] = useState(150000);
+  const [ppfRate, setPpfRate] = useState(7.1);
+  const [ppfTenure, setPpfTenure] = useState(15);
+  const [ppfResult, setPpfResult] = useState(null);
+
+  // EPF Calculator State
+  const [epfSalary, setEpfSalary] = useState(50000);
+  const [epfRate, setEpfRate] = useState(12);
+  const [epfTenure, setEpfTenure] = useState(20);
+  const [epfResult, setEpfResult] = useState(null);
+
+  // SIP Calculator State
+  const [sipAmount, setSipAmount] = useState(5000);
+  const [sipRate, setSipRate] = useState(12);
+  const [sipTenure, setSipTenure] = useState(10);
+  const [sipResult, setSipResult] = useState(null);
+
+  // Lumpsum Calculator State
+  const [lumpsumAmount, setLumpsumAmount] = useState(100000);
+  const [lumpsumRate, setLumpsumRate] = useState(10);
+  const [lumpsumTenure, setLumpsumTenure] = useState(5);
+  const [lumpsumResult, setLumpsumResult] = useState(null);
 
   useEffect(() => {
-    const fetchTaxRecords = async () => {
+    const loadTaxRecords = async () => {
       setIsFetchingRecords(true);
-      const response = await mockApiCall(`/tax-records/${userId}`);
-      setTaxRecords(response.data);
+      try {
+        const records = await fetchTaxRecords();
+        setTaxRecords(records.data);
+      } catch (error) {
+        console.error("Failed to fetch tax records:", error);
+      }
       setIsFetchingRecords(false);
     };
+    loadTaxRecords();
+  }, []);
 
-    fetchTaxRecords();
-  }, [userId]);
+  const formatCurrency = (amount) =>
+    `₹${amount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
-  const calculateTax = async (e) => {
+  // Tax Calculator Handler
+  const handleCalculateTax = async (e) => {
     e.preventDefault();
-    setIsCalculating(true);
+    setIsCalculatingTax(true);
+    setIsFetchingSuggestion(true);
 
     const taxData = {
-      income: userIncome,
-      ltcg: longTermCapitalGains,
-      stcg: shortTermCapitalGains,
-      dividends: dividendIncome,
+      taxYear,
+      userIncome,
+      longTermCapitalGains,
+      shortTermCapitalGains,
+      dividendIncome,
     };
 
-    const response = await mockApiCall("/calculate-tax", taxData);
-    setTaxResult(response.data);
-    setRecommendations(generateTaxRecommendations(response.data));
-    setIsCalculating(false);
+    try {
+      const [result, suggestion] = await Promise.all([
+        calculateTax(taxData),
+        fetchGeminiTaxSuggestion(taxData),
+      ]);
+
+      setTaxResult(result.data);
+      setTaxSuggestion(suggestion);
+    } catch (error) {
+      console.error("Tax calculation failed:", error);
+    }
+
+    setIsCalculatingTax(false);
+    setIsFetchingSuggestion(false);
   };
 
-  const formatCurrency = (amount) => {
-    return `₹${amount?.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+  // FD Calculator Handler
+  const handleCalculateFD = (e) => {
+    e.preventDefault();
+    const interest = (fdAmount * fdRate * fdTenure) / 100;
+    const maturity = fdAmount + interest;
+    setFdResult({ interest, maturity });
+  };
+
+  // Loan Calculator Handler
+  const handleCalculateLoan = (e) => {
+    e.preventDefault();
+    const r = loanRate / 12 / 100;
+    const n = loanTenure * 12;
+    const emi = (loanAmount * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+    const totalPayment = emi * n;
+    const totalInterest = totalPayment - loanAmount;
+    setLoanResult({ emi, totalInterest, totalPayment });
+  };
+
+  // Compound Interest Calculator Handler
+  const handleCalculateCI = (e) => {
+    e.preventDefault();
+    const amount = ciPrincipal * Math.pow(1 + ciRate / 100, ciTime);
+    const interest = amount - ciPrincipal;
+    setCiResult({ amount, interest });
+  };
+
+  // NPS Calculator Handler
+  const handleCalculateNPS = (e) => {
+    e.preventDefault();
+    const amount = npsAmount * Math.pow(1 + npsRate / 100, npsTenure);
+    const maturity = amount * 0.4 + amount * 0.6; // 40% lump sum, 60% annuity (simplified)
+    setNpsResult({ maturity });
+  };
+
+  // RD Calculator Handler
+  const handleCalculateRD = (e) => {
+    e.preventDefault();
+    const n = rdTenure * 12;
+    const r = rdRate / 100 / 12;
+    const maturity = rdAmount * ((Math.pow(1 + r, n) - 1) / r) * (1 + r);
+    const interest = maturity - rdAmount * n;
+    setRdResult({ maturity, interest });
+  };
+
+  // PPF Calculator Handler
+  const handleCalculatePPF = (e) => {
+    e.preventDefault();
+    const amount = ppfAmount * ((Math.pow(1 + ppfRate / 100, ppfTenure) - 1) / (ppfRate / 100));
+    setPpfResult({ maturity: amount });
+  };
+
+  // EPF Calculator Handler
+  const handleCalculateEPF = (e) => {
+    e.preventDefault();
+    const monthlyContribution = (epfSalary * epfRate) / 100 * 2; // Employee + Employer
+    const amount = monthlyContribution * 12 * ((Math.pow(1 + epfRate / 100, epfTenure) - 1) / (epfRate / 100));
+    setEpfResult({ maturity: amount });
+  };
+
+  // SIP Calculator Handler
+  const handleCalculateSIP = (e) => {
+    e.preventDefault();
+    const r = sipRate / 100 / 12;
+    const n = sipTenure * 12;
+    const amount = sipAmount * ((Math.pow(1 + r, n) - 1) / r) * (1 + r);
+    setSipResult({ maturity: amount });
+  };
+
+  // Lumpsum Calculator Handler
+  const handleCalculateLumpsum = (e) => {
+    e.preventDefault();
+    const amount = lumpsumAmount * Math.pow(1 + lumpsumRate / 100, lumpsumTenure);
+    setLumpsumResult({ maturity: amount });
   };
 
   return (
     <div className="p-4 lg:p-6 bg-gray-900 min-h-screen">
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
-        <h1 className="text-2xl font-bold mb-4 lg:mb-0">
-          Tax Calculator & AI Recommendations
-        </h1>
-      </div>
+      <h1 className="text-2xl font-bold mb-4">Financial Calculators</h1>
 
-      <Tabs
-        defaultValue="calculator"
-        className="w-full"
-        onValueChange={setActiveTab}
-      >
-        <TabsList className="w-full bg-white/5 p-1 rounded-lg mb-6">
-          <TabsTrigger
-            value="calculator"
-            className="flex-1 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600/80 data-[state=active]:to-indigo-600/80"
-          >
-            <Calculator className="h-4 w-4 mr-2" />
-            Tax Calculator
-          </TabsTrigger>
-          <TabsTrigger
-            value="recommendations"
-            className="flex-1 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600/80 data-[state=active]:to-indigo-600/80"
-          >
-            <Zap className="h-4 w-4 mr-2" />
-            AI Recommendations
-          </TabsTrigger>
-          <TabsTrigger
-            value="history"
-            className="flex-1 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600/80 data-[state=active]:to-indigo-600/80"
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Tax History
-          </TabsTrigger>
+      {/* AI Recommendation at Top */}
+      {taxSuggestion && (
+        <div className="mb-6 p-4 bg-gradient-to-r from-purple-900/50 to-indigo-900/50 rounded-xl border border-white/10">
+          <h2 className="text-lg font-medium text-gray-300 mb-2 flex items-center">
+            <Info className="h-5 w-5 mr-2 text-purple-400" />
+            AI Tax-Saving Recommendation
+          </h2>
+          <p className="text-sm text-gray-400 whitespace-pre-line">{taxSuggestion}</p>
+        </div>
+      )}
+
+      <Tabs defaultValue="tax" className="w-full">
+        <TabsList className="w-full bg-white/5 p-1 rounded-lg mb-6 flex flex-wrap">
+          <TabsTrigger value="tax">Tax</TabsTrigger>
+          <TabsTrigger value="fd">FD</TabsTrigger>
+          <TabsTrigger value="loan">Loan</TabsTrigger>
+          <TabsTrigger value="compound">Compound Interest</TabsTrigger>
+          <TabsTrigger value="nps">NPS</TabsTrigger>
+          <TabsTrigger value="rd">RD</TabsTrigger>
+          <TabsTrigger value="ppf">PPF</TabsTrigger>
+          <TabsTrigger value="epf">EPF</TabsTrigger>
+          <TabsTrigger value="sip">SIP</TabsTrigger>
+          <TabsTrigger value="lumpsum">Lumpsum</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="calculator" className="space-y-6">
+        {/* Tax Calculator */}
+        <TabsContent value="tax" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Tax Calculator Form */}
-            <div className="lg:col-span-2">
-              <div className="relative bg-gradient-to-bl from-purple-900/50 via-gray-900/80 to-indigo-900/50 p-5 rounded-xl overflow-hidden">
-                <div className="absolute inset-0 rounded-xl p-[1px] bg-gradient-to-bl from-purple-500/20 via-fuchsia-500/10 to-indigo-500/20"></div>
-                <div className="relative z-10">
-                  <div className="flex items-center mb-4">
-                    <Calculator className="h-5 w-5 mr-2 text-purple-400" />
-                    <h2 className="text-xl font-medium">
-                      Income Tax Calculator
-                    </h2>
+            <div className="lg:col-span-2 bg-gradient-to-bl from-purple-900/50 via-gray-900/80 to-indigo-900/50 p-5 rounded-xl">
+              <form onSubmit={handleCalculateTax} className="space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Tax Year</label>
+                  <Select value={taxYear} onValueChange={setTaxYear}>
+                    <SelectTrigger className="bg-white/5 border-white/10">
+                      <SelectValue placeholder="Select Year" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-900 border-white/10">
+                      <SelectItem value="2024">FY 2024-25</SelectItem>
+                      <SelectItem value="2025">FY 2025-26</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Annual Income (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">₹</span>
+                    <Input
+                      type="number"
+                      value={userIncome}
+                      onChange={(e) => setUserIncome(Number(e.target.value))}
+                      className="pl-9 bg-white/5 border-white/10"
+                      required
+                    />
                   </div>
-
-                  <form onSubmit={calculateTax} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm text-gray-400 mb-1">
-                          User ID
-                        </label>
-                        <Input
-                          type="text"
-                          value={userId}
-                          onChange={(e) => setUserId(e.target.value)}
-                          className="w-full bg-white/5 border-white/10 focus:border-purple-500/50"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm text-gray-400 mb-1">
-                          Tax Year
-                        </label>
-                        <Select value={taxYear} onValueChange={setTaxYear}>
-                          <SelectTrigger className="w-full bg-white/5 border-white/10 focus:ring-purple-500/30">
-                            <SelectValue placeholder="Select Year" />
-                          </SelectTrigger>
-                          <SelectContent className="bg-gray-900 border-white/10">
-                            <SelectItem value="2024">2024</SelectItem>
-                            <SelectItem value="2025">2025</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-sm text-gray-400">
-                          Annual Income
-                        </label>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-4 w-4 text-gray-500 cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent className="bg-gray-800 border-white/10">
-                              <p className="text-xs">
-                                Total income from salary, business, and other
-                                sources
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                      <div className="relative">
-                        <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <Input
-                          type="number"
-                          value={userIncome}
-                          onChange={(e) =>
-                            setUserIncome(Number(e.target.value))
-                          }
-                          className="w-full pl-9 bg-white/5 border-white/10 focus:border-purple-500/50"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-sm text-gray-400">
-                            Long-Term Capital Gains
-                          </label>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="h-4 w-4 text-gray-500 cursor-help" />
-                              </TooltipTrigger>
-                              <TooltipContent className="bg-gray-800 border-white/10">
-                                <p className="text-xs">
-                                  Gains from assets held for more than 1 year
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <div className="relative">
-                          <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                          <Input
-                            type="number"
-                            value={longTermCapitalGains}
-                            onChange={(e) =>
-                              setLongTermCapitalGains(Number(e.target.value))
-                            }
-                            className="w-full pl-9 bg-white/5 border-white/10 focus:border-purple-500/50"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-sm text-gray-400">
-                            Short-Term Capital Gains
-                          </label>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="h-4 w-4 text-gray-500 cursor-help" />
-                              </TooltipTrigger>
-                              <TooltipContent className="bg-gray-800 border-white/10">
-                                <p className="text-xs">
-                                  Gains from assets held for less than 1 year
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <div className="relative">
-                          <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                          <Input
-                            type="number"
-                            value={shortTermCapitalGains}
-                            onChange={(e) =>
-                              setShortTermCapitalGains(Number(e.target.value))
-                            }
-                            className="w-full pl-9 bg-white/5 border-white/10 focus:border-purple-500/50"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-sm text-gray-400">
-                            Dividend Income
-                          </label>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="h-4 w-4 text-gray-500 cursor-help" />
-                              </TooltipTrigger>
-                              <TooltipContent className="bg-gray-800 border-white/10">
-                                <p className="text-xs">
-                                  Income received as dividends from investments
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <div className="relative">
-                          <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                          <Input
-                            type="number"
-                            value={dividendIncome}
-                            onChange={(e) =>
-                              setDividendIncome(Number(e.target.value))
-                            }
-                            className="w-full pl-9 bg-white/5 border-white/10 focus:border-purple-500/50"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <Button
-                      type="submit"
-                      className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 font-medium shadow-[0_0_15px_rgba(139,92,246,0.3)] hover:shadow-[0_0_20px_rgba(139,92,246,0.5)]"
-                      disabled={isCalculating}
-                    >
-                      {isCalculating ? (
-                        <>
-                          <div className="mr-2 h-4 w-4 rounded-full border-2 border-b-transparent animate-spin"></div>
-                          Calculating...
-                        </>
-                      ) : (
-                        "Calculate Tax"
-                      )}
-                    </Button>
-                  </form>
                 </div>
-              </div>
-            </div>
-
-            {/* Tax Summary */}
-            <div className="lg:col-span-1">
-              <div className="relative bg-gradient-to-bl from-indigo-900/50 via-gray-900/80 to-blue-900/50 p-5 rounded-xl overflow-hidden h-full">
-                <div className="absolute inset-0 rounded-xl p-[1px] bg-gradient-to-bl from-indigo-500/20 via-blue-500/10 to-cyan-500/20"></div>
-                <div className="relative z-10">
-                  <div className="flex items-center mb-4">
-                    <FileText className="h-5 w-5 mr-2 text-blue-400" />
-                    <h2 className="text-xl font-medium">Tax Summary</h2>
-                  </div>
-
-                  {taxResult ? (
-                    <div className="space-y-4">
-                      <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-gray-400">Total Tax</span>
-                          <span className="text-xl font-medium">
-                            {formatCurrency(taxResult.currentTax)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm text-gray-400">
-                          <span>Effective Tax Rate</span>
-                          <span>
-                            {Math.round(
-                              (taxResult.currentTax /
-                                (userIncome +
-                                  longTermCapitalGains +
-                                  shortTermCapitalGains +
-                                  dividendIncome)) *
-                                100
-                            )}
-                            %
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div>
-                          <div className="flex justify-between items-center mb-1 text-sm">
-                            <span className="text-gray-400">Income Tax</span>
-                            <span>{formatCurrency(taxResult.incomeTax)}</span>
-                          </div>
-                          <Progress
-                            value={
-                              (taxResult.incomeTax / taxResult.currentTax) * 100
-                            }
-                            className="h-2 bg-white/10"
-                            indicatorClassName="bg-gradient-to-r from-purple-500 to-indigo-500"
-                          />
-                        </div>
-                        <div>
-                          <div className="flex justify-between items-center mb-1 text-sm">
-                            <span className="text-gray-400">
-                              Long-Term Capital Gains Tax
-                            </span>
-                            <span>{formatCurrency(taxResult.ltcgTax)}</span>
-                          </div>
-                          <Progress
-                            value={
-                              (taxResult.ltcgTax / taxResult.currentTax) * 100
-                            }
-                            className="h-2 bg-white/10"
-                            indicatorClassName="bg-gradient-to-r from-green-500 to-emerald-500"
-                          />
-                        </div>
-                        <div>
-                          <div className="flex justify-between items-center mb-1 text-sm">
-                            <span className="text-gray-400">
-                              Short-Term Capital Gains Tax
-                            </span>
-                            <span>{formatCurrency(taxResult.stcgTax)}</span>
-                          </div>
-                          <Progress
-                            value={
-                              (taxResult.stcgTax / taxResult.currentTax) * 100
-                            }
-                            className="h-2 bg-white/10"
-                            indicatorClassName="bg-gradient-to-r from-blue-500 to-cyan-500"
-                          />
-                        </div>
-                        <div>
-                          <div className="flex justify-between items-center mb-1 text-sm">
-                            <span className="text-gray-400">Dividend Tax</span>
-                            <span>{formatCurrency(taxResult.dividendTax)}</span>
-                          </div>
-                          <Progress
-                            value={
-                              (taxResult.dividendTax / taxResult.currentTax) *
-                              100
-                            }
-                            className="h-2 bg-white/10"
-                            indicatorClassName="bg-gradient-to-r from-yellow-500 to-amber-500"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-gray-400">Cess (4%)</span>
-                          <span>
-                            {formatCurrency(taxResult.currentTax * 0.04)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center font-medium">
-                          <span>Total Payable Tax</span>
-                          <span className="text-lg">
-                            {formatCurrency(taxResult.currentTax * 1.04)}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="border-white/10 bg-white/5 hover:bg-white/10"
-                          onClick={() => setActiveTab("recommendations")}
-                        >
-                          <Zap className="h-4 w-4 mr-2 text-yellow-400" />
-                          View Tax Saving Tips
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="border-white/10 bg-white/5 hover:bg-white/10"
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          Export
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-[calc(100%-2rem)] text-center">
-                      <BarChart4 className="h-12 w-12 text-gray-600 mb-3" />
-                      <p className="text-gray-400">
-                        Enter your details and calculate tax to see the summary
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Tax Breakdown */}
-          {taxResult && (
-            <div className="relative bg-gradient-to-bl from-violet-900/50 via-gray-900/80 to-purple-900/50 p-5 rounded-xl overflow-hidden">
-              <div className="absolute inset-0 rounded-xl p-[1px] bg-gradient-to-bl from-violet-500/20 via-purple-500/10 to-indigo-500/20"></div>
-              <div className="relative z-10">
-                <div className="flex items-center mb-4">
-                  <PieChart className="h-5 w-5 mr-2 text-violet-400" />
-                  <h2 className="text-xl font-medium">
-                    Detailed Tax Breakdown
-                  </h2>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <h3 className="text-lg font-medium mb-3">
-                      Income Tax Calculation
-                    </h3>
-                    <div className="space-y-3">
-                      <div className="p-3 bg-white/5 rounded-lg border border-white/10">
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <span className="text-gray-400 text-sm">
-                              Annual Income
-                            </span>
-                            <div className="font-medium">
-                              {formatCurrency(userIncome)}
-                            </div>
-                          </div>
-                          <Badge className="bg-purple-500/20 text-purple-300">
-                            {taxResult.taxRate * 100}% Tax Rate
-                          </Badge>
-                        </div>
-                      </div>
-
-                      <Accordion
-                        type="single"
-                        collapsible
-                        className="bg-white/5 rounded-lg border border-white/10"
-                      >
-                        <AccordionItem
-                          value="item-1"
-                          className="border-b-white/10"
-                        >
-                          <AccordionTrigger className="px-3 py-2 hover:bg-white/5 hover:no-underline">
-                            <div className="flex items-center">
-                              <span>Income Tax Slabs</span>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent className="px-3 pb-3">
-                            <div className="space-y-2 text-sm">
-                              <div className="flex justify-between">
-                                <span className="text-gray-400">
-                                  Up to ₹2.5 Lakhs
-                                </span>
-                                <span>0%</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-400">
-                                  ₹2.5 Lakhs to ₹5 Lakhs
-                                </span>
-                                <span>5%</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-400">
-                                  ₹5 Lakhs to ₹10 Lakhs
-                                </span>
-                                <span>10%</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-400">
-                                  ₹10 Lakhs to ₹15 Lakhs
-                                </span>
-                                <span>15%</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-400">
-                                  ₹15 Lakhs to ₹20 Lakhs
-                                </span>
-                                <span>20%</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-400">
-                                  Above ₹20 Lakhs
-                                </span>
-                                <span>30%</span>
-                              </div>
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      </Accordion>
+                    <label className="block text-sm text-gray-400 mb-1">
+                      Long-Term Capital Gains (₹)
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-4 w-4 inline ml-1" />
+                          </TooltipTrigger>
+                          <TooltipContent>{"Gains from assets held > 1 year"}</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">₹</span>
+                      <Input
+                        type="number"
+                        value={longTermCapitalGains}
+                        onChange={(e) => setLongTermCapitalGains(Number(e.target.value))}
+                        className="pl-9 bg-white/5 border-white/10"
+                      />
                     </div>
                   </div>
-
                   <div>
-                    <h3 className="text-lg font-medium mb-3">
-                      Capital Gains & Dividend
-                    </h3>
-                    <div className="space-y-3">
-                      <div className="p-3 bg-white/5 rounded-lg border border-white/10">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-gray-400 text-sm">
-                            Long-Term Capital Gains
-                          </span>
-                          <span>{formatCurrency(longTermCapitalGains)}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-400">Tax Rate</span>
-                          <Badge className="bg-green-500/20 text-green-300">
-                            10%
-                          </Badge>
-                        </div>
-                      </div>
-
-                      <div className="p-3 bg-white/5 rounded-lg border border-white/10">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-gray-400 text-sm">
-                            Short-Term Capital Gains
-                          </span>
-                          <span>{formatCurrency(shortTermCapitalGains)}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-400">Tax Rate</span>
-                          <Badge className="bg-blue-500/20 text-blue-300">
-                            15%
-                          </Badge>
-                        </div>
-                      </div>
-
-                      <div className="p-3 bg-white/5 rounded-lg border border-white/10">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-gray-400 text-sm">
-                            Dividend Income
-                          </span>
-                          <span>{formatCurrency(dividendIncome)}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-400">Tax Rate</span>
-                          <Badge className="bg-yellow-500/20 text-yellow-300">
-                            10%
-                          </Badge>
-                        </div>
-                      </div>
+                    <label className="block text-sm text-gray-400 mb-1">
+                      Short-Term Capital Gains (₹)
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-4 w-4 inline ml-1" />
+                          </TooltipTrigger>
+                          <TooltipContent>{"Gains from assets held < 1 year"}</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">₹</span>
+                      <Input
+                        type="number"
+                        value={shortTermCapitalGains}
+                        onChange={(e) => setShortTermCapitalGains(Number(e.target.value))}
+                        className="pl-9 bg-white/5 border-white/10"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">
+                      Dividend Income (₹)
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-4 w-4 inline ml-1" />
+                          </TooltipTrigger>
+                          <TooltipContent>{"Tax-free in India"}</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">₹</span>
+                      <Input
+                        type="number"
+                        value={dividendIncome}
+                        onChange={(e) => setDividendIncome(Number(e.target.value))}
+                        className="pl-9 bg-white/5 border-white/10"
+                      />
                     </div>
                   </div>
                 </div>
-              </div>
+                <Button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-600"
+                  disabled={isCalculatingTax || isFetchingSuggestion}
+                >
+                  {isCalculatingTax || isFetchingSuggestion ? "Processing..." : "Calculate Tax"}
+                </Button>
+              </form>
             </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="recommendations" className="space-y-6">
-          <div className="relative bg-gradient-to-bl from-fuchsia-900/50 via-gray-900/80 to-purple-900/50 p-5 rounded-xl overflow-hidden">
-            <div className="absolute inset-0 rounded-xl p-[1px] bg-gradient-to-bl from-fuchsia-500/20 via-pink-500/10 to-purple-500/20"></div>
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center">
-                  <Zap className="h-5 w-5 mr-2 text-yellow-400" />
-                  <h2 className="text-xl font-medium">
-                    AI Tax Saving Recommendations
-                  </h2>
-                </div>
-                {taxResult ? (
-                  <Badge className="bg-green-500/20 text-green-300">
-                    Potential Savings:{" "}
-                    {formatCurrency(taxResult.currentTax * 0.25)}+
-                  </Badge>
-                ) : (
-                  <Button
-                    size="sm"
-                    className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
-                    onClick={() => setActiveTab("calculator")}
-                  >
-                    Calculate Tax First
-                  </Button>
-                )}
-              </div>
-
-              {recommendations.length > 0 ? (
+            <div className="lg:col-span-1 bg-gradient-to-bl from-indigo-900/50 via-gray-900/80 to-blue-900/50 p-5 rounded-xl">
+              <h2 className="text-xl font-medium mb-4 flex items-center">
+                <FileText className="h-5 w-5 mr-2 text-blue-400" />
+                Tax Summary
+              </h2>
+              {taxResult ? (
                 <div className="space-y-4">
-                  {recommendations?.map((rec, index) => (
-                    <div
-                      key={index}
-                      className="relative bg-white/5 rounded-lg p-4 border border-white/10 hover:border-purple-500/30 transition-all duration-200 overflow-hidden group"
-                    >
-                      <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-fuchsia-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                      <div className="relative z-10">
-                        <div className="flex items-start">
-                          <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center mr-4 mt-1">
-                            <rec.icon className="h-5 w-5 text-purple-400" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-start justify-between">
-                              <h3 className="font-medium">{rec.title}</h3>
-                              <Badge
-                                className={`${
-                                  rec.priority === "High"
-                                    ? "bg-red-500/20 text-red-300"
-                                    : rec.priority === "Medium"
-                                    ? "bg-yellow-500/20 text-yellow-300"
-                                    : "bg-green-500/20 text-green-300"
-                                }`}
-                              >
-                                {rec.priority} Priority
-                              </Badge>
-                            </div>
-                            <p className="text-sm text-gray-300 mt-1">
-                              {rec.description}
-                            </p>
-                            <div className="flex items-center justify-between mt-3">
-                              <span className="text-sm text-green-400 font-medium">
-                                {rec.impact}
-                              </span>
-                              <Button
-                                variant="link"
-                                className="text-sm text-purple-400 p-0 h-auto"
-                              >
-                                Learn More
-                                <ArrowUpRight className="h-3 w-3 ml-1" />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                  <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-400">Total Tax</span>
+                      <span className="text-xl font-medium">{formatCurrency(taxResult.totalTax)}</span>
                     </div>
-                  ))}
-
-                  <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                    <div className="flex items-start">
-                      <AlertCircle className="h-5 w-5 text-yellow-400 mr-3 mt-0.5" />
-                      <div>
-                        <h4 className="font-medium">Important Disclaimer</h4>
-                        <p className="text-sm text-gray-300 mt-1">
-                          These recommendations are for informational purposes
-                          only and do not constitute tax advice. Please consult
-                          with a qualified tax professional before making
-                          financial decisions.
-                        </p>
-                      </div>
+                    <div className="flex justify-between text-sm text-gray-400">
+                      <span>Effective Tax Rate</span>
+                      <span>
+                        {Math.round(
+                          (taxResult.totalTax /
+                            (userIncome + longTermCapitalGains + shortTermCapitalGains + dividendIncome)) * 100
+                        )}%
+                      </span>
                     </div>
                   </div>
-                </div>
-              ) : taxResult ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="w-12 h-12 rounded-full bg-yellow-500/20 flex items-center justify-center mb-4">
-                    <Lightbulb className="h-6 w-6 text-yellow-400" />
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-400">Income Tax</span>
+                      <span>{formatCurrency(taxResult.incomeTax)}</span>
+                    </div>
+                    <Progress
+                      value={(taxResult.incomeTax / taxResult.totalTax) * 100}
+                      className="h-2 bg-white/10"
+                    />
                   </div>
-                  <h3 className="text-lg font-medium mb-2">
-                    Generating Recommendations...
-                  </h3>
-                  <p className="text-gray-400 max-w-md">
-                    Our AI is analyzing your tax data to provide personalized
-                    recommendations for tax optimization.
-                  </p>
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-400">LTCG Tax</span>
+                      <span>{formatCurrency(taxResult.ltcgTax)}</span>
+                    </div>
+                    <Progress
+                      value={(taxResult.ltcgTax / taxResult.totalTax) * 100}
+                      className="h-2 bg-white/10"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-400">STCG Tax</span>
+                      <span>{formatCurrency(taxResult.stcgTax)}</span>
+                    </div>
+                    <Progress
+                      value={(taxResult.stcgTax / taxResult.totalTax) * 100}
+                      className="h-2 bg-white/10"
+                    />
+                  </div>
+                  <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex justify-between mb-1">
+                      <span className="text-gray-400">Cess (4%)</span>
+                      <span>{formatCurrency(taxResult.cess)}</span>
+                    </div>
+                    <div className="flex justify-between font-medium">
+                      <span>Total Payable Tax</span>
+                      <span className="text-lg">{formatCurrency(taxResult.currentTax)}</span>
+                    </div>
+                  </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center mb-4">
-                    <Calculator className="h-6 w-6 text-gray-400" />
-                  </div>
-                  <h3 className="text-lg font-medium mb-2">
-                    No Tax Data Available
-                  </h3>
-                  <p className="text-gray-400 max-w-md">
-                    Please use the tax calculator first to receive personalized
-                    AI recommendations for tax optimization.
-                  </p>
-                  <Button
-                    className="mt-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
-                    onClick={() => setActiveTab("calculator")}
-                  >
-                    Go to Calculator
-                  </Button>
-                </div>
+                <p className="text-gray-400 text-center">Calculate tax to see summary</p>
               )}
             </div>
           </div>
-
-          {taxResult && (
-            <div className="relative bg-gradient-to-bl from-blue-900/50 via-gray-900/80 to-indigo-900/50 p-5 rounded-xl overflow-hidden">
-              <div className="absolute inset-0 rounded-xl p-[1px] bg-gradient-to-bl from-blue-500/20 via-indigo-500/10 to-purple-500/20"></div>
-              <div className="relative z-10">
-                <div className="flex items-center mb-4">
-                  <CheckCircle2 className="h-5 w-5 mr-2 text-green-400" />
-                  <h2 className="text-xl font-medium">
-                    Tax Optimization Checklist
-                  </h2>
+          {isFetchingRecords ? (
+            <p>Loading...</p>
+          ) : taxRecords ? (
+            <div className="bg-gradient-to-bl from-indigo-900/50 via-gray-900/80 to-blue-900/50 p-5 rounded-xl">
+              <h2 className="text-xl font-medium mb-4 flex items-center">
+                <FileText className="h-5 w-5 mr-2 text-blue-400" />
+                Tax History
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="p-4 bg-white/5 rounded-lg text-center">
+                  <div className="text-gray-400 text-sm">Total Income</div>
+                  <div className="text-xl font-medium">{formatCurrency(taxRecords.totalIncome)}</div>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-3 bg-white/5 rounded-lg border border-white/10 flex items-start">
-                    <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center mr-3 mt-0.5">
-                      <span className="text-sm">1</span>
-                    </div>
-                    <div>
-                      <h4 className="font-medium">
-                        Maximize Section 80C Deductions
-                      </h4>
-                      <p className="text-sm text-gray-400 mt-1">
-                        Invest in ELSS, PPF, EPF, NPS, or pay life insurance
-                        premiums up to ₹1.5 lakhs.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-white/5 rounded-lg border border-white/10 flex items-start">
-                    <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center mr-3 mt-0.5">
-                      <span className="text-sm">2</span>
-                    </div>
-                    <div>
-                      <h4 className="font-medium">
-                        Health Insurance Premium (Sec 80D)
-                      </h4>
-                      <p className="text-sm text-gray-400 mt-1">
-                        Claim deduction for health insurance premiums up to
-                        ₹25,000 for self and family.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-white/5 rounded-lg border border-white/10 flex items-start">
-                    <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center mr-3 mt-0.5">
-                      <span className="text-sm">3</span>
-                    </div>
-                    <div>
-                      <h4 className="font-medium">Home Loan Benefits</h4>
-                      <p className="text-sm text-gray-400 mt-1">
-                        Claim interest deduction up to ₹2 lakhs and principal
-                        repayment under Sec 80C.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-white/5 rounded-lg border border-white/10 flex items-start">
-                    <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center mr-3 mt-0.5">
-                      <span className="text-sm">4</span>
-                    </div>
-                    <div>
-                      <h4 className="font-medium">
-                        Education Loan Interest (Sec 80E)
-                      </h4>
-                      <p className="text-sm text-gray-400 mt-1">
-                        Claim deduction for interest paid on education loans
-                        with no upper limit.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-white/5 rounded-lg border border-white/10 flex items-start">
-                    <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center mr-3 mt-0.5">
-                      <span className="text-sm">5</span>
-                    </div>
-                    <div>
-                      <h4 className="font-medium">
-                        Additional NPS Contribution (Sec 80CCD)
-                      </h4>
-                      <p className="text-sm text-gray-400 mt-1">
-                        Claim additional deduction up to ₹50,000 for NPS
-                        contributions.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-white/5 rounded-lg border border-white/10 flex items-start">
-                    <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center mr-3 mt-0.5">
-                      <span className="text-sm">6</span>
-                    </div>
-                    <div>
-                      <h4 className="font-medium">Donations (Sec 80G)</h4>
-                      <p className="text-sm text-gray-400 mt-1">
-                        Claim deductions for donations to approved charitable
-                        organizations.
-                      </p>
-                    </div>
-                  </div>
+                <div className="p-4 bg-white/5 rounded-lg text-center">
+                  <div className="text-gray-400 text-sm">Total Tax Paid</div>
+                  <div className="text-xl font-medium">{formatCurrency(taxRecords.totalTaxPaid)}</div>
+                </div>
+                <div className="p-4 bg-white/5 rounded-lg text-center">
+                  <div className="text-gray-400 text-sm">Total Cess Paid</div>
+                  <div className="text-xl font-medium">{formatCurrency(taxRecords.totalCessPaid)}</div>
+                </div>
+                <div className="p-4 bg-white/5 rounded-lg text-center">
+                  <div className="text-gray-400 text-sm">Total Amount Paid</div>
+                  <div className="text-xl font-medium">{formatCurrency(taxRecords.totalAmountPaid)}</div>
                 </div>
               </div>
+              <Button className="mt-4">
+                <Download className="h-4 w-4 mr-2" />
+                Export History
+              </Button>
             </div>
+          ) : (
+            <p className="text-gray-400">No tax records found</p>
           )}
         </TabsContent>
 
-        <TabsContent value="history" className="space-y-6">
-          <div className="relative bg-gradient-to-bl from-indigo-900/50 via-gray-900/80 to-blue-900/50 p-5 rounded-xl overflow-hidden">
-            <div className="absolute inset-0 rounded-xl p-[1px] bg-gradient-to-bl from-indigo-500/20 via-blue-500/10 to-cyan-500/20"></div>
-            <div className="relative z-10">
-              <div className="flex items-center mb-4">
-                <FileText className="h-5 w-5 mr-2 text-blue-400" />
-                <h2 className="text-xl font-medium">Tax History & Records</h2>
-              </div>
-
-              {isFetchingRecords ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="h-8 w-8 rounded-full border-2 border-b-transparent border-purple-500 animate-spin"></div>
+        {/* FD Calculator */}
+        <TabsContent value="fd" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-gradient-to-bl from-purple-900/50 via-gray-900/80 to-indigo-900/50 p-5 rounded-xl">
+              <form onSubmit={handleCalculateFD} className="space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Principal Amount (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">₹</span>
+                    <Input
+                      type="number"
+                      value={fdAmount}
+                      onChange={(e) => setFdAmount(Number(e.target.value))}
+                      className="pl-9 bg-white/5 border-white/10"
+                      required
+                    />
+                  </div>
                 </div>
-              ) : taxRecords ? (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="p-4 bg-white/5 rounded-lg border border-white/10 text-center">
-                      <div className="text-gray-400 text-sm mb-1">
-                        Total Income
-                      </div>
-                      <div className="text-xl font-medium">
-                        {formatCurrency(taxRecords.totalIncome)}
-                      </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Interest Rate (% p.a.)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={fdRate}
+                    onChange={(e) => setFdRate(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Tenure (Years)</label>
+                  <Input
+                    type="number"
+                    value={fdTenure}
+                    onChange={(e) => setFdTenure(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full bg-gradient-to-r from-purple-600 to-indigo-600">
+                  Calculate FD
+                </Button>
+              </form>
+            </div>
+            <div className="lg:col-span-1 bg-gradient-to-bl from-indigo-900/50 via-gray-900/80 to-blue-900/50 p-5 rounded-xl">
+              <h2 className="text-xl font-medium mb-4 flex items-center">
+                <FileText className="h-5 w-5 mr-2 text-blue-400" />
+                FD Summary
+              </h2>
+              {fdResult ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex justify-between mb-1">
+                      <span className="text-gray-400">Interest Earned</span>
+                      <span>{formatCurrency(fdResult.interest)}</span>
                     </div>
-                    <div className="p-4 bg-white/5 rounded-lg border border-white/10 text-center">
-                      <div className="text-gray-400 text-sm mb-1">
-                        Total Tax Paid
-                      </div>
-                      <div className="text-xl font-medium">
-                        {formatCurrency(taxRecords.totalTaxPaid)}
-                      </div>
+                    <div className="flex justify-between font-medium">
+                      <span>Maturity Amount</span>
+                      <span className="text-lg">{formatCurrency(fdResult.maturity)}</span>
                     </div>
-                    <div className="p-4 bg-white/5 rounded-lg border border-white/10 text-center">
-                      <div className="text-gray-400 text-sm mb-1">
-                        Total Cess Paid
-                      </div>
-                      <div className="text-xl font-medium">
-                        {formatCurrency(taxRecords.totalCessPaid)}
-                      </div>
-                    </div>
-                    <div className="p-4 bg-white/5 rounded-lg border border-white/10 text-center">
-                      <div className="text-gray-400 text-sm mb-1">
-                        Total Amount Paid
-                      </div>
-                      <div className="text-xl font-medium">
-                        {formatCurrency(taxRecords.totalAmountPaid)}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-lg font-medium mb-3">
-                      Tax Payment History
-                    </h3>
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-white/10">
-                            <th className="text-left py-3 px-4 font-medium text-gray-400">
-                              Tax Year
-                            </th>
-                            <th className="text-right py-3 px-4 font-medium text-gray-400">
-                              Income
-                            </th>
-                            <th className="text-right py-3 px-4 font-medium text-gray-400">
-                              Tax Paid
-                            </th>
-                            <th className="text-right py-3 px-4 font-medium text-gray-400">
-                              Cess Paid
-                            </th>
-                            <th className="text-right py-3 px-4 font-medium text-gray-400">
-                              Total Paid
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {taxRecords.taxHistory?.map((record, index) => (
-                            <tr
-                              key={index}
-                              className="border-b border-white/5 hover:bg-white/5"
-                            >
-                              <td className="py-3 px-4">{record.year}</td>
-                              <td className="py-3 px-4 text-right">
-                                {formatCurrency(record.income)}
-                              </td>
-                              <td className="py-3 px-4 text-right">
-                                {formatCurrency(record.taxPaid)}
-                              </td>
-                              <td className="py-3 px-4 text-right">
-                                {formatCurrency(record.cessPaid)}
-                              </td>
-                              <td className="py-3 px-4 text-right font-medium">
-                                {formatCurrency(record.totalPaid)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end">
-                    <Button
-                      variant="outline"
-                      className="border-white/10 bg-white/5 hover:bg-white/10"
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Export Tax History
-                    </Button>
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center mb-4">
-                    <FileText className="h-6 w-6 text-gray-400" />
+                <p className="text-gray-400 text-center">Calculate FD to see summary</p>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Loan Calculator */}
+        <TabsContent value="loan" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-gradient-to-bl from-purple-900/50 via-gray-900/80 to-indigo-900/50 p-5 rounded-xl">
+              <form onSubmit={handleCalculateLoan} className="space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Loan Amount (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">₹</span>
+                    <Input
+                      type="number"
+                      value={loanAmount}
+                      onChange={(e) => setLoanAmount(Number(e.target.value))}
+                      className="pl-9 bg-white/5 border-white/10"
+                      required
+                    />
                   </div>
-                  <h3 className="text-lg font-medium mb-2">
-                    No Tax Records Found
-                  </h3>
-                  <p className="text-gray-400 max-w-md">
-                    Please enter your User ID and calculate your taxes to view
-                    your tax history.
-                  </p>
-                  <Button
-                    className="mt-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
-                    onClick={() => setActiveTab("calculator")}
-                  >
-                    Go to Calculator
-                  </Button>
                 </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Interest Rate (% p.a.)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={loanRate}
+                    onChange={(e) => setLoanRate(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Tenure (Years)</label>
+                  <Input
+                    type="number"
+                    value={loanTenure}
+                    onChange={(e) => setLoanTenure(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full bg-gradient-to-r from-purple-600 to-indigo-600">
+                  Calculate Loan
+                </Button>
+              </form>
+            </div>
+            <div className="lg:col-span-1 bg-gradient-to-bl from-indigo-900/50 via-gray-900/80 to-blue-900/50 p-5 rounded-xl">
+              <h2 className="text-xl font-medium mb-4 flex items-center">
+                <FileText className="h-5 w-5 mr-2 text-blue-400" />
+                Loan Summary
+              </h2>
+              {loanResult ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex justify-between mb-1">
+                      <span className="text-gray-400">Monthly EMI</span>
+                      <span>{formatCurrency(loanResult.emi)}</span>
+                    </div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-gray-400">Total Interest</span>
+                      <span>{formatCurrency(loanResult.totalInterest)}</span>
+                    </div>
+                    <div className="flex justify-between font-medium">
+                      <span>Total Payment</span>
+                      <span className="text-lg">{formatCurrency(loanResult.totalPayment)}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-400 text-center">Calculate loan to see summary</p>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Compound Interest Calculator */}
+        <TabsContent value="compound" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-gradient-to-bl from-purple-900/50 via-gray-900/80 to-indigo-900/50 p-5 rounded-xl">
+              <form onSubmit={handleCalculateCI} className="space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Principal Amount (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">₹</span>
+                    <Input
+                      type="number"
+                      value={ciPrincipal}
+                      onChange={(e) => setCiPrincipal(Number(e.target.value))}
+                      className="pl-9 bg-white/5 border-white/10"
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Interest Rate (% p.a.)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={ciRate}
+                    onChange={(e) => setCiRate(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Time (Years)</label>
+                  <Input
+                    type="number"
+                    value={ciTime}
+                    onChange={(e) => setCiTime(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full bg-gradient-to-r from-purple-600 to-indigo-600">
+                  Calculate Compound Interest
+                </Button>
+              </form>
+            </div>
+            <div className="lg:col-span-1 bg-gradient-to-bl from-indigo-900/50 via-gray-900/80 to-blue-900/50 p-5 rounded-xl">
+              <h2 className="text-xl font-medium mb-4 flex items-center">
+                <FileText className="h-5 w-5 mr-2 text-blue-400" />
+                Compound Interest Summary
+              </h2>
+              {ciResult ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex justify-between mb-1">
+                      <span className="text-gray-400">Interest Earned</span>
+                      <span>{formatCurrency(ciResult.interest)}</span>
+                    </div>
+                    <div className="flex justify-between font-medium">
+                      <span>Total Amount</span>
+                      <span className="text-lg">{formatCurrency(ciResult.amount)}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-400 text-center">Calculate to see summary</p>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* NPS Calculator */}
+        <TabsContent value="nps" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-gradient-to-bl from-purple-900/50 via-gray-900/80 to-indigo-900/50 p-5 rounded-xl">
+              <form onSubmit={handleCalculateNPS} className="space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Annual Contribution (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">₹</span>
+                    <Input
+                      type="number"
+                      value={npsAmount}
+                      onChange={(e) => setNpsAmount(Number(e.target.value))}
+                      className="pl-9 bg-white/5 border-white/10"
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Expected Return (% p.a.)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={npsRate}
+                    onChange={(e) => setNpsRate(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Tenure (Years)</label>
+                  <Input
+                    type="number"
+                    value={npsTenure}
+                    onChange={(e) => setNpsTenure(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full bg-gradient-to-r from-purple-600 to-indigo-600">
+                  Calculate NPS
+                </Button>
+              </form>
+            </div>
+            <div className="lg:col-span-1 bg-gradient-to-bl from-indigo-900/50 via-gray-900/80 to-blue-900/50 p-5 rounded-xl">
+              <h2 className="text-xl font-medium mb-4 flex items-center">
+                <FileText className="h-5 w-5 mr-2 text-blue-400" />
+                NPS Summary
+              </h2>
+              {npsResult ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex justify-between font-medium">
+                      <span>Maturity Amount</span>
+                      <span className="text-lg">{formatCurrency(npsResult.maturity)}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-400 text-center">Calculate NPS to see summary</p>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* RD Calculator */}
+        <TabsContent value="rd" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-gradient-to-bl from-purple-900/50 via-gray-900/80 to-indigo-900/50 p-5 rounded-xl">
+              <form onSubmit={handleCalculateRD} className="space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Monthly Deposit (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">₹</span>
+                    <Input
+                      type="number"
+                      value={rdAmount}
+                      onChange={(e) => setRdAmount(Number(e.target.value))}
+                      className="pl-9 bg-white/5 border-white/10"
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Interest Rate (% p.a.)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={rdRate}
+                    onChange={(e) => setRdRate(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Tenure (Years)</label>
+                  <Input
+                    type="number"
+                    value={rdTenure}
+                    onChange={(e) => setRdTenure(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full bg-gradient-to-r from-purple-600 to-indigo-600">
+                  Calculate RD
+                </Button>
+              </form>
+            </div>
+            <div className="lg:col-span-1 bg-gradient-to-bl from-indigo-900/50 via-gray-900/80 to-blue-900/50 p-5 rounded-xl">
+              <h2 className="text-xl font-medium mb-4 flex items-center">
+                <FileText className="h-5 w-5 mr-2 text-blue-400" />
+                RD Summary
+              </h2>
+              {rdResult ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex justify-between mb-1">
+                      <span className="text-gray-400">Interest Earned</span>
+                      <span>{formatCurrency(rdResult.interest)}</span>
+                    </div>
+                    <div className="flex justify-between font-medium">
+                      <span>Maturity Amount</span>
+                      <span className="text-lg">{formatCurrency(rdResult.maturity)}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-400 text-center">Calculate RD to see summary</p>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* PPF Calculator */}
+        <TabsContent value="ppf" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-gradient-to-bl from-purple-900/50 via-gray-900/80 to-indigo-900/50 p-5 rounded-xl">
+              <form onSubmit={handleCalculatePPF} className="space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Annual Investment (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">₹</span>
+                    <Input
+                      type="number"
+                      value={ppfAmount}
+                      onChange={(e) => setPpfAmount(Number(e.target.value))}
+                      className="pl-9 bg-white/5 border-white/10"
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Interest Rate (% p.a.)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={ppfRate}
+                    onChange={(e) => setPpfRate(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Tenure (Years)</label>
+                  <Input
+                    type="number"
+                    value={ppfTenure}
+                    onChange={(e) => setPpfTenure(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full bg-gradient-to-r from-purple-600 to-indigo-600">
+                  Calculate PPF
+                </Button>
+              </form>
+            </div>
+            <div className="lg:col-span-1 bg-gradient-to-bl from-indigo-900/50 via-gray-900/80 to-blue-900/50 p-5 rounded-xl">
+              <h2 className="text-xl font-medium mb-4 flex items-center">
+                <FileText className="h-5 w-5 mr-2 text-blue-400" />
+                PPF Summary
+              </h2>
+              {ppfResult ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex justify-between font-medium">
+                      <span>Maturity Amount</span>
+                      <span className="text-lg">{formatCurrency(ppfResult.maturity)}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-400 text-center">Calculate PPF to see summary</p>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* EPF Calculator */}
+        <TabsContent value="epf" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-gradient-to-bl from-purple-900/50 via-gray-900/80 to-indigo-900/50 p-5 rounded-xl">
+              <form onSubmit={handleCalculateEPF} className="space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Monthly Salary (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">₹</span>
+                    <Input
+                      type="number"
+                      value={epfSalary}
+                      onChange={(e) => setEpfSalary(Number(e.target.value))}
+                      className="pl-9 bg-white/5 border-white/10"
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Contribution Rate (%)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={epfRate}
+                    onChange={(e) => setEpfRate(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Tenure (Years)</label>
+                  <Input
+                    type="number"
+                    value={epfTenure}
+                    onChange={(e) => setEpfTenure(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full bg-gradient-to-r from-purple-600 to-indigo-600">
+                  Calculate EPF
+                </Button>
+              </form>
+            </div>
+            <div className="lg:col-span-1 bg-gradient-to-bl from-indigo-900/50 via-gray-900/80 to-blue-900/50 p-5 rounded-xl">
+              <h2 className="text-xl font-medium mb-4 flex items-center">
+                <FileText className="h-5 w-5 mr-2 text-blue-400" />
+                EPF Summary
+              </h2>
+              {epfResult ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex justify-between font-medium">
+                      <span>Maturity Amount</span>
+                      <span className="text-lg">{formatCurrency(epfResult.maturity)}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-400 text-center">Calculate EPF to see summary</p>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* SIP Calculator */}
+        <TabsContent value="sip" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-gradient-to-bl from-purple-900/50 via-gray-900/80 to-indigo-900/50 p-5 rounded-xl">
+              <form onSubmit={handleCalculateSIP} className="space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Monthly Investment (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">₹</span>
+                    <Input
+                      type="number"
+                      value={sipAmount}
+                      onChange={(e) => setSipAmount(Number(e.target.value))}
+                      className="pl-9 bg-white/5 border-white/10"
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Expected Return (% p.a.)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={sipRate}
+                    onChange={(e) => setSipRate(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Tenure (Years)</label>
+                  <Input
+                    type="number"
+                    value={sipTenure}
+                    onChange={(e) => setSipTenure(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full bg-gradient-to-r from-purple-600 to-indigo-600">
+                  Calculate SIP
+                </Button>
+              </form>
+            </div>
+            <div className="lg:col-span-1 bg-gradient-to-bl from-indigo-900/50 via-gray-900/80 to-blue-900/50 p-5 rounded-xl">
+              <h2 className="text-xl font-medium mb-4 flex items-center">
+                <FileText className="h-5 w-5 mr-2 text-blue-400" />
+                SIP Summary
+              </h2>
+              {sipResult ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex justify-between font-medium">
+                      <span>Maturity Amount</span>
+                      <span className="text-lg">{formatCurrency(sipResult.maturity)}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-400 text-center">Calculate SIP to see summary</p>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Lumpsum Calculator */}
+        <TabsContent value="lumpsum" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-gradient-to-bl from-purple-900/50 via-gray-900/80 to-indigo-900/50 p-5 rounded-xl">
+              <form onSubmit={handleCalculateLumpsum} className="space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Investment Amount (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">₹</span>
+                    <Input
+                      type="number"
+                      value={lumpsumAmount}
+                      onChange={(e) => setLumpsumAmount(Number(e.target.value))}
+                      className="pl-9 bg-white/5 border-white/10"
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Expected Return (% p.a.)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={lumpsumRate}
+                    onChange={(e) => setLumpsumRate(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Tenure (Years)</label>
+                  <Input
+                    type="number"
+                    value={lumpsumTenure}
+                    onChange={(e) => setLumpsumTenure(Number(e.target.value))}
+                    className="bg-white/5 border-white/10"
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full bg-gradient-to-r from-purple-600 to-indigo-600">
+                  Calculate Lumpsum
+                </Button>
+              </form>
+            </div>
+            <div className="lg:col-span-1 bg-gradient-to-bl from-indigo-900/50 via-gray-900/80 to-blue-900/50 p-5 rounded-xl">
+              <h2 className="text-xl font-medium mb-4 flex items-center">
+                <FileText className="h-5 w-5 mr-2 text-blue-400" />
+                Lumpsum Summary
+              </h2>
+              {lumpsumResult ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex justify-between font-medium">
+                      <span>Maturity Amount</span>
+                      <span className="text-lg">{formatCurrency(lumpsumResult.maturity)}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-400 text-center">Calculate Lumpsum to see summary</p>
               )}
             </div>
           </div>

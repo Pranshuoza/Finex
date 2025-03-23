@@ -68,7 +68,7 @@ export default function GoalsPage() {
   return (
     <div className="p-4 lg:p-6 bg-gray-900 text-white">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
-        <h1 className="text-2xl font-bold mb-4 lg:mb-0">Financial Goals (India)</h1>
+        <h1 className="text-2xl font-bold mb-4 lg:mb-0">Financial Goals</h1>
         <button
           onClick={() => setShowNewGoalForm(!showNewGoalForm)}
           className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 font-medium flex items-center shadow-[0_0_15px_rgba(139,92,246,0.5)] hover:shadow-[0_0_20px_rgba(139,92,246,0.7)] hover:scale-105"

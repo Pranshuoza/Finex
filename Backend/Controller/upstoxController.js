@@ -73,7 +73,7 @@ exports.getAccessToken = async (req, res) => {
     user.upstoxUserId = user_id;
     await user.save();
 
-    res.redirect("http://localhost:5173/dashboard");
+    res.redirect("http://localhost:5173/");
   } catch (error) {
     console.error("Error in getAccessToken:", error.response?.data || error.message);
     res.redirect(`http://localhost:5173/login?error=${encodeURIComponent(error.response?.data?.message || error.message)}`);

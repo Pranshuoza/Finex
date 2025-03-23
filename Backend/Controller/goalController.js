@@ -2,26 +2,35 @@ const Goal = require("../Model/Goal");
 const User = require("../Model/User");
 const jwt = require("jsonwebtoken");
 
+// Verify token helper
+const verifyToken = async (token) => {
+  if (!token) throw new Error("No token provided");
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  const user = await User.findOne({ email: decoded.email }).select("-password");
+  if (!user) throw new Error("User not found");
+  return user;
+};
+
 // Create a new goal
 const createGoal = async (req, res) => {
   try {
     const token = req.headers["x-access-token"];
-    if (!token) return res.status(401).json({ message: "No token provided" });
+    const user = await verifyToken(token);
+    const { goalName, goalAmount, goalDate, description, monthlyInvestment } = req.body;
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const email = decoded.email;
-    const user = await User.findOne({ email }).select("-password");
-
-    if (!user) return res.status(401).json({ message: "User not found" });
-
-    const { goalName, goalAmount, goalDate, description } = req.body;
+    if (!goalName || !goalAmount || !goalDate) {
+      return res.status(400).json({ error: "goalName, goalAmount, and goalDate are required" });
+    }
 
     const newGoal = new Goal({
       userId: user._id,
       goalName,
       goalAmount,
       goalDate,
+      currentAmount: 0,
+      completed: false,
       description,
+      monthlyInvestment: monthlyInvestment || 0, // Default to 0 if not provided
     });
 
     await newGoal.save();
@@ -35,14 +44,7 @@ const createGoal = async (req, res) => {
 const getUserGoals = async (req, res) => {
   try {
     const token = req.headers["x-access-token"];
-    if (!token) return res.status(401).json({ message: "No token provided" });
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const email = decoded.email;
-    const user = await User.findOne({ email }).select("-password");
-
-    if (!user) return res.status(401).json({ message: "User not found" });
-
+    const user = await verifyToken(token);
     const goals = await Goal.find({ userId: user._id });
     res.status(200).json(goals);
   } catch (error) {
@@ -50,46 +52,37 @@ const getUserGoals = async (req, res) => {
   }
 };
 
-// Update a goal (only if it belongs to the user)
+// Update a goal
 const updateGoal = async (req, res) => {
   try {
     const token = req.headers["x-access-token"];
-    if (!token) return res.status(401).json({ message: "No token provided" });
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const email = decoded.email;
-    const user = await User.findOne({ email }).select("-password");
-
-    if (!user) return res.status(401).json({ message: "User not found" });
-
+    const user = await verifyToken(token);
     const { id } = req.params;
-    const { currentAmount } = req.body;
+    const { currentAmount, monthlyInvestment } = req.body;
 
     const goal = await Goal.findOne({ _id: id, userId: user._id });
-    if (!goal) return res.status(404).json({ error: "Goal not found" });
+    if (!goal) return res.status(404).json({ error: "Goal not found or not authorized" });
 
-    goal.currentAmount = currentAmount;
-    goal.completed = goal.currentAmount >= goal.goalAmount;
+    if (currentAmount !== undefined) {
+      goal.currentAmount = currentAmount;
+      goal.completed = goal.currentAmount >= goal.goalAmount;
+    }
+    if (monthlyInvestment !== undefined) {
+      goal.monthlyInvestment = monthlyInvestment;
+    }
+
     await goal.save();
-
     res.status(200).json({ message: "Goal updated successfully", goal });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// Delete a goal (only if it belongs to the user)
+// Delete a goal
 const deleteGoal = async (req, res) => {
   try {
     const token = req.headers["x-access-token"];
-    if (!token) return res.status(401).json({ message: "No token provided" });
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const email = decoded.email;
-    const user = await User.findOne({ email }).select("-password");
-
-    if (!user) return res.status(401).json({ message: "User not found" });
-
+    const user = await verifyToken(token);
     const { id } = req.params;
 
     const goal = await Goal.findOneAndDelete({ _id: id, userId: user._id });
@@ -101,9 +94,21 @@ const deleteGoal = async (req, res) => {
   }
 };
 
+// Get user profile
+const getUserProfile = async (req, res) => {
+  try {
+    const token = req.headers["x-access-token"];
+    const user = await verifyToken(token);
+    res.status(200).json(user);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   createGoal,
   getUserGoals,
   updateGoal,
   deleteGoal,
+  getUserProfile,
 };

@@ -178,5 +178,9 @@ const getTotalTax = async (req, res) => {
   }
 };
 
-// Export Controller
-module.exports = { createTaxRecord, getAllTaxRecords, updateTaxRecord, deleteTaxRecord, getTotalTax };
+module.exports = {
+  createOrUpdateTax,
+  getUserTaxRecords,
+  getTaxByYear,
+  deleteTaxRecord,
+};

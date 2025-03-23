@@ -12,6 +12,8 @@ import AccountDetails from "./Pages/Account/AccountDetails";
 import CategoryPage from "./Pages/Category/Category";
 import LandingPage from "./Pages/Landing/LandingPage"
 import { FinancialChatbot } from "./Pages/ChatBot/Chatbot";
+{/*import Tax from "./Pages/Tax/Tax";*/}
+import Goals from "./Pages/Goals/Goal";
 import "./App.css";
 
 // Public Layout Component (without Sidebar and Navbar)
@@ -62,7 +64,6 @@ function ProtectedLayout({ children }) {
       {/* Main content area */}
       <div className="flex-1 flex flex-col overflow-hidden z-10">
         {/* Navbar */}
-        <Navbar className="sticky top-0 bg-gray-900/80 backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.3)]" />
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
@@ -152,6 +153,22 @@ function AppContent() {
         element={
           <ProtectedLayout>
             <FixedDepositApp />
+          </ProtectedLayout>
+        }
+      />
+      {/*<Route
+        path="/tax"
+        element={
+          <ProtectedLayout>
+            <Tax />
+          </ProtectedLayout>
+        }
+      />*/}
+      <Route
+        path="/goals"
+        element={
+          <ProtectedLayout>
+            <Goals />
           </ProtectedLayout>
         }
       />

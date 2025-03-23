@@ -1,11 +1,23 @@
 const express = require("express");
-const { createOrUpdateTax, getUserTaxRecords, getTaxByYear, deleteTaxRecord } = require("../Controller/taxController");
+const {
+  createTaxRecord,
+  getAllTaxRecords,
+  updateTaxRecord,
+  deleteTaxRecord,
+  getTotalTax
+} = require("../Controller/taxController");
 
 const router = express.Router();
 
-router.post("/", createOrUpdateTax);
-router.get("/", getUserTaxRecords);
-router.get("/:taxYear", getTaxByYear);
-router.delete("/:taxYear", deleteTaxRecord);
+router.post("/create", createTaxRecord
+);
+
+router.get("/", getAllTaxRecords);
+
+router.put("/:id", updateTaxRecord);
+
+router.delete("/:id", deleteTaxRecord);
+
+router.get("/total/:userId", getTotalTax);
 
 module.exports = router;

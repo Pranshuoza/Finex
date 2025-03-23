@@ -50,7 +50,7 @@ app.use('/transactions', transactionRoutes);
 app.use("/api/inngest", serve({ client: inngest, functions: [generateMonthlyReports] }));
 app.use('/tax', taxRoutes);
 app.use('/chat', chatRoutes); 
-app.use('/goal', goalRoutes);
+app.use('/goals', goalRoutes);
 app.use('/stocks', stockRoutes);
 app.use("/upstox", upstoxRoutes);
 

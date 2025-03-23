@@ -13,6 +13,7 @@ import CategoryPage from "./Pages/Category/Category";
 import LandingPage from "./Pages/Landing/LandingPage"
 import { FinancialChatbot } from "./Pages/ChatBot/Chatbot";
 import "./App.css";
+import CommunityPage from "./Pages/Community/Community";
 
 // Public Layout Component (without Sidebar and Navbar)
 function PublicLayout({ children }) {
@@ -184,6 +185,14 @@ function AppContent() {
         element={
           <ProtectedLayout>
             <StockApp />
+          </ProtectedLayout>
+        }
+      />
+      <Route
+        path="/community"
+        element={
+          <ProtectedLayout>
+            <CommunityPage />
           </ProtectedLayout>
         }
       />

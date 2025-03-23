@@ -12,10 +12,9 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend, // Added for better chart visibility
 } from "recharts";
 import { ArrowUpRight, ArrowDownRight, Zap, X, Star } from "lucide-react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const BASE_API_URL = "http://localhost:3000/stocks";
@@ -40,9 +39,21 @@ export default function Dashboard() {
   const [monthlyData, setMonthlyData] = useState([]);
   const [portfolioData, setPortfolioData] = useState([]);
   const [aiRecommendations] = useState([
-    { title: "Diversification Strategy", description: "Optimize your portfolio allocation", action: "View Details" },
-    { title: "Portfolio Prediction", description: "See future performance trends", action: "View Forecast" },
-    { title: "Risk Analysis", description: "Assess sector risks", action: "View Risks" },
+    {
+      title: "Diversification Strategy",
+      description: "Optimize your portfolio allocation",
+      action: "View Details",
+    },
+    {
+      title: "Portfolio Prediction",
+      description: "See future performance trends",
+      action: "View Forecast",
+    },
+    {
+      title: "Risk Analysis",
+      description: "Assess sector risks",
+      action: "View Risks",
+    },
   ]);
   const [totalInvestments, setTotalInvestments] = useState(0);
   const [currentValue, setCurrentValue] = useState(0);
@@ -60,7 +71,6 @@ export default function Dashboard() {
   const [riskLoading, setRiskLoading] = useState(true);
 
   const navigate = useNavigate();
-  const location = useLocation();
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
@@ -73,7 +83,8 @@ export default function Dashboard() {
       });
       if (!response.ok) throw new Error(`Failed to fetch stock data: ${response.statusText}`);
       const data = await response.json();
-      console.log("Fetched stock data:", data);
+      console.log("AI Stock Data:", data);
+      console.log("monthlyData", monthlyData);
       return data;
     } catch (error) {
       console.error("Error fetching stock data for AI:", error);
@@ -87,6 +98,7 @@ export default function Dashboard() {
     return response.json();
   };
 
+  // Mock Gemini API responses based on fallbackPortfolio
   const fetchGeminiSuggestion = async (prompt) => {
     return new Promise((resolve) => {
       setTimeout(() => {
@@ -107,10 +119,11 @@ export default function Dashboard() {
         } else {
           resolve("Mock Gemini response.\nAdjust prompt for specific data.");
         }
-      }, 1000);
+      }, 1000); // Simulate API delay
     });
   };
 
+  // Mock Hugging Face API responses based on fallbackPortfolio
   const fetchHFSuggestion = async (prompt) => {
     return new Promise((resolve) => {
       setTimeout(() => {
@@ -119,178 +132,142 @@ export default function Dashboard() {
         } else {
           resolve("Mock HF response.\nAdjust prompt for specific data.");
         }
-      }, 1000);
+      }, 1000); // Simulate API delay
     });
   };
 
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem("token");
-      if (!token) {
-        console.log("No token found, redirecting to login");
-        navigate("/login");
-        return;
-      }
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          console.log("No token found, redirecting to login");
+          navigate("/login");
+          return;
+        }
 
-      const profileData = await fetchData("/profile", token.replace("/stocks", ""));
-      if (profileData.status !== "ok" || !profileData.profile) throw new Error("Failed to fetch profile");
-      setHasUpstoxToken(!!profileData.profile.upstoxAccessToken);
+        const profileData = await fetchData("/profile", token.replace("/stocks", ""));
+        if (profileData.status !== "ok" || !profileData.profile) throw new Error("Failed to fetch profile");
+        setHasUpstoxToken(!!profileData.profile.upstoxAccessToken);
 
-      if (!profileData.profile.upstoxAccessToken) {
-        setPortfolioData(fallbackPortfolio);
-        setTotalInvestments(fallbackPortfolio.reduce((sum, stock) => sum + stock.avgPrice * stock.netQty, 0));
-        setCurrentValue(fallbackPortfolio.reduce((sum, stock) => sum + stock.currentValue, 0));
-        setOverallPL(fallbackPortfolio.reduce((sum, stock) => sum + stock.overallPL, 0));
-        
-        // Mock daily and monthly data for fallback
-        const mockDaily = Array.from({ length: 15 }, (_, i) => ({
-          name: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
-          value: fallbackPortfolio.reduce((sum, stock) => sum + stock.currentValue, 0) * (0.95 + Math.random() * 0.1),
-        })).reverse();
-        const mockMonthly = Array.from({ length: 12 }, (_, i) => ({
-          name: new Date(Date.now() - i * 30 * 24 * 60 * 60 * 1000).toLocaleString("en-IN", { month: "short", year: "numeric" }),
-          value: fallbackPortfolio.reduce((sum, stock) => sum + stock.currentValue, 0) * (0.95 + Math.random() * 0.1),
-        })).reverse();
+        if (!profileData.profile.upstoxAccessToken) {
+          setLoading(false);
+          return;
+        }
 
-        setDailyData(mockDaily);
-        setMonthlyData(mockMonthly);
-        console.log("Fallback dailyData:", mockDaily);
-        console.log("Fallback monthlyData:", mockMonthly);
+        const stocks = await fetchData("/", token);
+        const transformedPortfolio = stocks.map((stock) => ({
+          symbol: stock.tradingSymbol,
+          netQty: stock.quantity,
+          avgPrice: stock.purchasePrice,
+          ltp: stock.currentPrice,
+          currentValue: stock.currentPrice * stock.quantity,
+          overallPL: (stock.currentPrice - stock.purchasePrice) * stock.quantity,
+          overallPercentage: stock.purchasePrice ? ((stock.currentPrice - stock.purchasePrice) / stock.purchasePrice) * 100 : 0,
+          stockId: stock._id,
+          sector: stock.tradingSymbol.startsWith("BANK") ? "Banking" :
+                  stock.tradingSymbol.startsWith("TECH") ? "Tech" :
+                  stock.tradingSymbol.startsWith("INFRA") ? "Infra" : "Others",
+        }));
+        setPortfolioData(transformedPortfolio);
+
+        const totalInv = stocks.reduce((sum, stock) => sum + stock.purchasePrice * stock.quantity, 0);
+        const currValue = stocks.reduce((sum, stock) => sum + stock.currentPrice * stock.quantity, 0);
+        setTotalInvestments(totalInv);
+        setCurrentValue(currValue);
+        setOverallPL(currValue - totalInv);
+
+        const { daily, monthly } = await fetchData("/portfolio/history", token);
+        setDailyData(daily.map((item) => ({
+          name: new Date(item.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+          value: item.value || 0,
+        })));
+        setMonthlyData(monthly.map((item) => ({
+          name: new Date(`${item.date}-01`).toLocaleString("en-IN", { month: "short", year: "numeric" }),
+          value: item.value || 0,
+        })));
+
+        console.log("Monthly Data", monthlyData);
         setLoading(false);
-        return;
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error.message);
+        setLoading(false);
       }
+    };
 
-      const stocks = await fetchData("/", token);
-      const transformedPortfolio = stocks.map((stock) => ({
-        symbol: stock.tradingSymbol,
-        netQty: stock.quantity,
-        avgPrice: stock.purchasePrice,
-        ltp: stock.currentPrice,
-        currentValue: stock.currentPrice * stock.quantity,
-        overallPL: (stock.currentPrice - stock.purchasePrice) * stock.quantity,
-        overallPercentage: stock.purchasePrice ? ((stock.currentPrice - stock.purchasePrice) / stock.purchasePrice) * 100 : 0,
-        stockId: stock._id,
-        sector: stock.tradingSymbol.startsWith("BANK") ? "Banking" :
-                stock.tradingSymbol.startsWith("TECH") ? "Tech" :
-                stock.tradingSymbol.startsWith("INFRA") ? "Infra" : "Others",
-      }));
-      setPortfolioData(transformedPortfolio);
+    fetchDashboardData();
+  }, [navigate, location.pathname]);
 
-      const totalInv = stocks.reduce((sum, stock) => sum + stock.purchasePrice * stock.quantity, 0);
-      const currValue = stocks.reduce((sum, stock) => sum + stock.currentPrice * stock.quantity, 0);
-      setTotalInvestments(totalInv);
-      setCurrentValue(currValue);
-      setOverallPL(currValue - totalInv);
-
-      const { daily, monthly } = await fetchData("/portfolio/history", token);
-      const formattedDaily = daily.map((item) => ({
-        name: new Date(item.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
-        value: item.value || 0,
-      }));
-      const formattedMonthly = monthly.map((item) => ({
-        name: new Date(`${item.date}-01`).toLocaleString("en-IN", { month: "short", year: "numeric" }),
-        value: item.value || 0,
-      }));
-
-      setDailyData(formattedDaily);
-      setMonthlyData(formattedMonthly);
-      console.log("Fetched dailyData:", formattedDaily);
-      console.log("Fetched monthlyData:", formattedMonthly);
-      setLoading(false);
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error.message);
-      setPortfolioData(fallbackPortfolio);
-      setTotalInvestments(fallbackPortfolio.reduce((sum, stock) => sum + stock.avgPrice * stock.netQty, 0));
-      setCurrentValue(fallbackPortfolio.reduce((sum, stock) => sum + stock.currentValue, 0));
-      setOverallPL(fallbackPortfolio.reduce((sum, stock) => sum + stock.overallPL, 0));
-
-      // Mock fallback data
-      const mockDaily = Array.from({ length: 15 }, (_, i) => ({
-        name: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
-        value: fallbackPortfolio.reduce((sum, stock) => sum + stock.currentValue, 0) * (0.95 + Math.random() * 0.1),
-      })).reverse();
-      const mockMonthly = Array.from({ length: 12 }, (_, i) => ({
-        name: new Date(Date.now() - i * 30 * 24 * 60 * 60 * 1000).toLocaleString("en-IN", { month: "short", year: "numeric" }),
-        value: fallbackPortfolio.reduce((sum, stock) => sum + stock.currentValue, 0) * (0.95 + Math.random() * 0.1),
-      })).reverse();
-
-      setDailyData(mockDaily);
-      setMonthlyData(mockMonthly);
-      console.log("Error fallback dailyData:", mockDaily);
-      console.log("Error fallback monthlyData:", mockMonthly);
-      setLoading(false);
-    }
-  };
-
+  // Diversification Data based on fallbackPortfolio
   const generateDiversificationData = () => {
-    const dataToUse = portfolioData.length ? portfolioData : fallbackPortfolio;
-    const totalValue = dataToUse.reduce((sum, stock) => sum + stock.currentValue, 0);
-    const currentDist = dataToUse.reduce((acc, stock) => {
+    const totalValue = fallbackPortfolio.reduce((sum, stock) => sum + stock.currentValue, 0);
+    const currentDist = fallbackPortfolio.reduce((acc, stock) => {
       acc[stock.sector] = (acc[stock.sector] || 0) + stock.currentValue;
       return acc;
     }, {});
 
     const suggestedDist = {
-      Banking: totalValue * 0.3,
-      Tech: totalValue * 0.2,
-      Infra: totalValue * 0.1,
-      Others: totalValue * 0.4,
+      Banking: totalValue * 0.3, // 30%
+      Tech: totalValue * 0.2,    // 20%
+      Infra: totalValue * 0.1,   // 10%
+      Others: totalValue * 0.4,  // 40%
     };
 
-    const chartData = [
-      { name: "Banking", currentWeight: currentDist.Banking ? (currentDist.Banking / totalValue) * 100 : 0, suggestedWeight: (suggestedDist.Banking / totalValue) * 100 },
-      { name: "Tech", currentWeight: currentDist.Tech ? (currentDist.Tech / totalValue) * 100 : 0, suggestedWeight: (suggestedDist.Tech / totalValue) * 100 },
-      { name: "Infra", currentWeight: currentDist.Infra ? (currentDist.Infra / totalValue) * 100 : 0, suggestedWeight: (suggestedDist.Infra / totalValue) * 100 },
-      { name: "Others", currentWeight: currentDist.Others ? (currentDist.Others / totalValue) * 100 : 0, suggestedWeight: (suggestedDist.Others / totalValue) * 100 },
+    return [
+      { name: "Banking", currentWeight: 0, suggestedWeight: (suggestedDist.Banking / totalValue) * 100 },
+      { name: "Tech", currentWeight: 0, suggestedWeight: (suggestedDist.Tech / totalValue) * 100 },
+      { name: "Infra", currentWeight: 0, suggestedWeight: (suggestedDist.Infra / totalValue) * 100 },
+      { name: "Others", currentWeight: (currentDist.Others / totalValue) * 100, suggestedWeight: (suggestedDist.Others / totalValue) * 100 },
     ];
-    console.log("Diversification chartData:", chartData);
-    return chartData;
   };
 
+  // Prediction Data based on fallbackPortfolio
   const generatePredictionData = () => {
-    const dataToUse = portfolioData.length ? portfolioData : fallbackPortfolio;
-    const totalCurrentValue = dataToUse.reduce((sum, stock) => sum + stock.currentValue, 0);
+    const totalCurrentValue = fallbackPortfolio.reduce((sum, stock) => sum + stock.currentValue, 0);
     const mockMonthlyData = [
-      { name: "Apr 2024", value: totalCurrentValue * 0.95 },
-      { name: "May 2024", value: totalCurrentValue * 0.97 },
-      { name: "Jun 2024", value: totalCurrentValue * 0.98 },
-      { name: "Jul 2024", value: totalCurrentValue * 1.05 },
-      { name: "Aug 2024", value: totalCurrentValue * 1.00 },
-      { name: "Sept 2024", value: totalCurrentValue * 1.10 },
-      { name: "Oct 2024", value: totalCurrentValue * 1.08 },
-      { name: "Nov 2024", value: totalCurrentValue * 1.06 },
-      { name: "Dec 2024", value: totalCurrentValue * 1.03 },
-      { name: "Jan 2025", value: totalCurrentValue * 1.01 },
-      { name: "Feb 2025", value: totalCurrentValue * 0.99 },
-      { name: "Mar 2025", value: totalCurrentValue },
+      { name: "Apr 2024", value: 91772.6 },
+      { name: "May 2024", value: 93585.15 },
+      { name: "Jun 2024", value: 93633.75 },
+      { name: "Jul 2024", value: 105239.95 },
+      { name: "Aug 2024", value: 100145.75 },
+      { name: "Sept 2024", value: 126332.4 },
+      { name: "Oct 2024", value: 113159.9 },
+      { name: "Nov 2024", value: 106200.9 },
+      { name: "Dec 2024", value: 97198.3 },
+      { name: "Jan 2025", value: 89871.65 },
+      { name: "Feb 2025", value: 75913.2 },
+      { name: "Mar 2025", value: 85142.15 },
     ];
 
     const futureMonths = [
-      { name: "Mar 2025", predicted: totalCurrentValue },
-      { name: "Apr 2025", predicted: totalCurrentValue * 1.02 },
-      { name: "May 2025", predicted: totalCurrentValue * 1.03 },
-      { name: "Jun 2025", predicted: totalCurrentValue * 1.02 },
-      { name: "Jul 2025", predicted: totalCurrentValue * 1.05 },
-      { name: "Aug 2025", predicted: totalCurrentValue * 1.06 },
-      { name: "Sep 2025", predicted: totalCurrentValue * 1.07 },
+      { name: "Mar 2025", predicted: 85142.15 },
+      { name: "Apr 2025", predicted: 87142.15 },
+      { name: "May 2025", predicted: 88642.15 },
+      { name: "Jun 2025", predicted: 87197.15 },
+      { name: "Jul 2025", predicted: 90278.4 },
+      { name: "Aug 2025", predicted: 91695.32 },
+      { name: "Sep 2025", predicted: 91185.82 },
     ];
 
-    const chartData = [...mockMonthlyData.map(d => ({ ...d, current: d.value })), ...futureMonths.map(d => ({ ...d, current: null }))];
-    console.log("Prediction chartData:", chartData);
-    return chartData;
+    return [...mockMonthlyData.map(d => ({ ...d, current: d.value })), ...futureMonths.map(d => ({ ...d, current: null }))];
   };
 
+  // Risk Data based on fallbackPortfolio
   const generateRiskData = () => {
-    const dataToUse = portfolioData.length ? portfolioData : fallbackPortfolio;
-    const riskPerStock = dataToUse.map(stock => {
+    const riskPerStock = fallbackPortfolio.map(stock => {
       const volatility = Math.abs(stock.overallPercentage);
       const risk = volatility > 20 ? "High" : volatility > 10 ? "Medium" : "Low";
       return { name: stock.symbol, value: stock.currentValue, risk, sector: stock.sector };
     });
 
     const sectorRisk = riskPerStock.reduce((acc, stock) => {
-      acc[stock.sector] = acc[stock.sector] || { value: 0, count: 0, high: 0, medium: 0, low: 0 };
+      acc[stock.sector] = acc[stock.sector] || {
+        value: 0,
+        count: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+      };
       acc[stock.sector].value += stock.value;
       acc[stock.sector].count += 1;
       if (stock.risk === "High") acc[stock.sector].high += 1;
@@ -299,14 +276,16 @@ export default function Dashboard() {
       return acc;
     }, {});
 
-    const chartData = Object.keys(sectorRisk).map((sector) => ({
+    return Object.keys(sectorRisk).map((sector) => ({
       name: sector,
       value: sectorRisk[sector].value,
-      risk: sectorRisk[sector].high > sectorRisk[sector].count * 0.5 ? "High" :
-            sectorRisk[sector].medium > sectorRisk[sector].count * 0.5 ? "Medium" : "Low",
+      risk:
+        sectorRisk[sector].high > sectorRisk[sector].count * 0.5
+          ? "High"
+          : sectorRisk[sector].medium > sectorRisk[sector].count * 0.5
+          ? "Medium"
+          : "Low",
     }));
-    console.log("Risk chartData:", chartData);
-    return chartData;
   };
 
   const fetchAIDiversification = async () => {
@@ -350,14 +329,10 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    fetchDashboardData();
-  }, [location.pathname, navigate]);
-
-  useEffect(() => {
-    if (!loading && hasUpstoxToken !== null) {
+    if (!loading && hasUpstoxToken) {
       Promise.all([fetchAIDiversification(), fetchAIPrediction(), fetchAIRisk()]);
     }
-  }, [loading, hasUpstoxToken]);
+  }, [loading, hasUpstoxToken, location.pathname]);
 
   const handleTabClick = (index) => {
     setActiveTab(index);
@@ -407,17 +382,15 @@ export default function Dashboard() {
       setOverallPL(currValue - totalInv);
 
       const { daily, monthly } = await fetchData("/portfolio/history", token);
-      const formattedDaily = daily.map((item) => ({
+      setDailyData(daily.map((item) => ({
         name: new Date(item.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
         value: item.value || 0,
-      }));
-      const formattedMonthly = monthly.map((item) => ({
+      })));
+      setMonthlyData(monthly.map((item) => ({
         name: new Date(`${item.date}-01`).toLocaleString("en-IN", { month: "short", year: "numeric" }),
         value: item.value || 0,
-      }));
+      })));
 
-      setDailyData(formattedDaily);
-      setMonthlyData(formattedMonthly);
       setLoading(false);
       Promise.all([fetchAIDiversification(), fetchAIPrediction(), fetchAIRisk()]);
     } catch (error) {
@@ -433,10 +406,10 @@ export default function Dashboard() {
     return (
       <div className="p-4 lg:p-6 flex flex-col items-center justify-center min-h-screen">
         <h2 className="text-2xl font-semibold text-white mb-4">
-          Link Your Account
+          Link Your Upstox Account
         </h2>
         <p className="text-gray-400 mb-6">
-          Connect your Account
+          Connect your Upstox account to view your portfolio.
         </p>
         <button
           onClick={() => navigate("/profile")}
@@ -478,12 +451,19 @@ export default function Dashboard() {
         <div className="relative bg-gradient-to-bl from-slate-800/80 via-gray-900/90 to-stone-800/80 p-5 rounded-xl overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-bl from-slate-500/20 via-gray-500/10 to-stone-500/20"></div>
           <div className="relative z-10">
-            <h3 className="text-gray-400 font-medium mb-1">Total Investments</h3>
+            <h3 className="text-gray-400 font-medium mb-1">
+              Total Investments
+            </h3>
             <div className="text-3xl font-bold">
-              ₹{totalInvestments.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+              ₹
+              {totalInvestments.toLocaleString("en-IN", {
+                maximumFractionDigits: 2,
+              })}
             </div>
             <div
-              className={`flex items-center mt-2 ${isNegative ? "text-red-400" : "text-green-400"}`}
+              className={`flex items-center mt-2 ${
+                isNegative ? "text-red-400" : "text-green-400"
+              }`}
             >
               {isNegative ? (
                 <ArrowDownRight className="h-4 w-4 mr-1" />
@@ -499,10 +479,15 @@ export default function Dashboard() {
           <div className="relative z-10">
             <h3 className="text-gray-400 font-medium mb-1">Current Value</h3>
             <div className="text-3xl font-bold">
-              ₹{currentValue.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+              ₹
+              {currentValue.toLocaleString("en-IN", {
+                maximumFractionDigits: 2,
+              })}
             </div>
             <div
-              className={`flex items-center mt-2 ${isNegative ? "text-red-400" : "text-green-400"}`}
+              className={`flex items-center mt-2 ${
+                isNegative ? "text-red-400" : "text-green-400"
+              }`}
             >
               {isNegative ? (
                 <ArrowDownRight className="h-4 w-4 mr-1" />
@@ -521,7 +506,9 @@ export default function Dashboard() {
               ₹{overallPL.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
             </div>
             <div
-              className={`flex items-center mt-2 ${isNegative ? "text-red-400" : "text-green-400"}`}
+              className={`flex items-center mt-2 ${
+                isNegative ? "text-red-400" : "text-green-400"
+              }`}
             >
               {isNegative ? (
                 <ArrowDownRight className="h-4 w-4 mr-1" />
@@ -537,15 +524,18 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         <div className="col-span-2 bg-gray-900 p-5 rounded-xl">
           <h3 className="font-medium text-white mb-4">Portfolio Performance (Last 15 Days)</h3>
-          <div className="h-96">
+          <div className="h-96 ml-4">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dailyData.length ? dailyData : [{ name: "No Data", value: 0 }]}>
+              <LineChart
+                data={
+                  dailyData.length ? dailyData : [{ name: "No Data", value: 0 }]
+                }
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
                 <XAxis dataKey="name" stroke="#4b5563" padding={{ left: 10, right: 10 }} />
-                <YAxis stroke="#4b5563" tickFormatter={(value) => `₹${value.toLocaleString("en-IN")}`} domain={["dataMin", "dataMax"]} padding={{ top: 10, bottom: 10 }} />
+                <YAxis stroke="#4b5563" tickFormatter={(value) => `₹${value.toLocaleString("en-IN")}`} domain={["dataMin", "dataMax"]} padding={{ top: 10, bottom: 10 }} tick={{ dx: -5 }} />
                 <Tooltip contentStyle={{ backgroundColor: "#1e1e2d", borderColor: "#374151", borderRadius: "0.5rem" }} formatter={(value) => `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`} />
-                <Legend />
-                <Line type="monotone" dataKey="value" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} name="Daily Value" />
+                <Line type="monotone" dataKey="value" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -572,7 +562,9 @@ export default function Dashboard() {
                       <h4 className="font-medium text-white">{rec.title}</h4>
                       <Star className="h-4 w-4 text-yellow-400" />
                     </div>
-                    <p className="text-sm text-gray-400 mt-1">{rec.description}</p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      {rec.description}
+                    </p>
                     <button className="mt-3 text-sm text-purple-400 hover:text-purple-300 transition-colors flex items-center">
                       {rec.action} <ArrowUpRight className="h-3 w-3 ml-1" />
                     </button>
@@ -610,13 +602,16 @@ export default function Dashboard() {
                   <pre className="text-sm text-gray-300 whitespace-pre-wrap bg-gray-900/50 p-3 rounded-lg border border-gray-700/50">
                     <strong className="text-purple-300">Steps:</strong>
                     <br />
-                    {getModalContent().detailedSuggestion || "No steps available."}
+                    {getModalContent().detailedSuggestion ||
+                      "No steps available."}
                   </pre>
                 </div>
                 {activeTab === 2 && (
                   <div className="max-h-40 overflow-y-auto scrollbar scrollbar-thumb-rounded-lg scrollbar-thumb-purple-500 scrollbar-track-gray-800/50">
                     <pre className="text-sm text-gray-300 whitespace-pre-wrap bg-gray-900/50 p-3 rounded-lg border border-gray-700/50">
-                      <strong className="text-purple-300">Low-Risk Stock Recommendations:</strong>
+                      <strong className="text-purple-300">
+                        Low-Risk Stock Recommendations:
+                      </strong>
                       <br />
                       {getModalContent().lowRiskStocks.length
                         ? getModalContent().lowRiskStocks.join("\n")
@@ -633,7 +628,6 @@ export default function Dashboard() {
                       <XAxis dataKey="name" stroke="#9ca3af" tick={{ fill: "#d1d5db" }} />
                       <YAxis stroke="#9ca3af" tickFormatter={(value) => `${value}%`} domain={[0, 100]} tick={{ fill: "#d1d5db" }} />
                       <Tooltip contentStyle={{ backgroundColor: "#1e1e2d", borderColor: "#374151", borderRadius: "0.5rem" }} formatter={(value) => `${value.toFixed(2)}%`} />
-                      <Legend />
                       <Bar dataKey="currentWeight" fill="#8b5cf6" name="Current" animationDuration={1000} barSize={30} />
                       <Bar dataKey="suggestedWeight" fill="#f43f5e" name="Suggested" animationDuration={1000} barSize={30} />
                     </BarChart>
@@ -643,14 +637,27 @@ export default function Dashboard() {
                       <XAxis dataKey="name" stroke="#9ca3af" interval={0} angle={-45} textAnchor="end" height={60} tick={{ fill: "#d1d5db" }} />
                       <YAxis stroke="#9ca3af" tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}K`} domain={['dataMin - 5000', 'dataMax + 5000']} tick={{ fill: "#d1d5db" }} />
                       <Tooltip contentStyle={{ backgroundColor: "#1e1e2d", borderColor: "#374151", borderRadius: "0.5rem" }} formatter={(value) => `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`} />
-                      <Legend />
-                      <Line type="monotone" dataKey="current" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 5, fill: "#8b5cf6" }} activeDot={{ r: 8 }} name="Current" animationDuration={1500} connectNulls />
-                      <Line type="monotone" dataKey="predicted" stroke="#f43f5e" strokeWidth={3} strokeDasharray="5 5" dot={{ r: 5, fill: "#f43f5e" }} activeDot={{ r: 8 }} name="Predicted" animationDuration={1500} connectNulls />
+                      <Line type="monotone" dataKey="current" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 5, fill: "#8b5cf6" }} activeDot={{ r: 8, fill: "#fff", stroke: "#8b5cf6" }} animationDuration={1500} connectNulls />
+                      <Line type="monotone" dataKey="predicted" stroke="#f43f5e" strokeWidth={3} strokeDasharray="5 5" dot={{ r: 5, fill: "#f43f5e" }} activeDot={{ r: 8, fill: "#fff", stroke: "#f43f5e" }} animationDuration={1500} connectNulls />
                     </LineChart>
                   ) : (
-                    <div>
-                      
-                    </div>
+                    <PieChart>
+                      <Pie data={getModalContent().chartData} cx="50%" cy="50%" labelLine={true} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} outerRadius={100} dataKey="value" animationDuration={1000}>
+                        {getModalContent().chartData.map((entry, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={
+                              entry.risk === "High"
+                                ? "#f43f5e"
+                                : entry.risk === "Medium"
+                                ? "#facc15"
+                                : "#22c55e"
+                            }
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: "#1e1e2d", borderColor: "#374151", borderRadius: "0.5rem" }} formatter={(value, name, props) => [`${props.payload.risk} Risk`, `₹${value.toLocaleString("en-IN")}`]} />
+                    </PieChart>
                   )}
                 </ResponsiveContainer>
               </div>
@@ -660,7 +667,9 @@ export default function Dashboard() {
       )}
 
       <div className="bg-gray-900 p-5 rounded-xl mt-6">
-        <h3 className="font-medium text-white mb-4">Portfolio Performance (Last 12 Months)</h3>
+        <h3 className="font-medium text-white mb-4">
+          Portfolio Performance (Last 12 Months)
+        </h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={monthlyData.length ? monthlyData : [{ name: "No Data", value: 0 }]}>
@@ -668,8 +677,7 @@ export default function Dashboard() {
               <XAxis dataKey="name" stroke="#4b5563" />
               <YAxis stroke="#4b5563" tickFormatter={(value) => `₹${value.toLocaleString("en-IN")}`} />
               <Tooltip contentStyle={{ backgroundColor: "#1e1e2d", borderColor: "#374151" }} formatter={(value) => `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`} />
-              <Legend />
-              <Bar dataKey="value" fill="#6366f1" name="Monthly Value" animationDuration={1000} />
+              <Bar dataKey="value" fill="#6366f1" animationDuration={1000} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -696,7 +704,10 @@ export default function Dashboard() {
               </thead>
               <tbody>
                 {enrichedPortfolioData.map((stock, index) => (
-                  <tr key={index} className="border-b border-white/5 hover:bg-white/5">
+                  <tr
+                    key={index}
+                    className="border-b border-white/5 hover:bg-white/5"
+                  >
                     <td className="py-3 font-medium">{stock.symbol}</td>
                     <td className="py-3">{stock.sector}</td>
                     <td className="py-3">{stock.netQty}</td>

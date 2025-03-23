@@ -52,28 +52,53 @@ const calculateTax = async (taxData) => {
 
 // Mock Gemini SDK for tax-saving suggestions
 const fetchGeminiTaxSuggestion = async (taxData) => {
+  const { userIncome, longTermCapitalGains, shortTermCapitalGains, dividendIncome, taxYear } = taxData;
+  const totalIncome = userIncome + longTermCapitalGains + shortTermCapitalGains + dividendIncome;
+
+  // Structured prompt for Gemini
+  const prompt = `
+    You are a tax expert specializing in Indian tax laws for the financial year ${taxYear}. I am providing you with a user's financial details, and I need you to suggest specific, actionable ways they can save tax based on their income and investments. Please consider all applicable sections of the Income Tax Act, such as Section 80C, 80D, 54, and others, and provide detailed recommendations tailored to their financial situation. Ensure the suggestions are practical and legally compliant.
+
+    Here are the user's financial details:
+    - Annual Income: ₹${userIncome.toLocaleString("en-IN")}
+    - Long-Term Capital Gains (LTCG): ₹${longTermCapitalGains.toLocaleString("en-IN")}
+    - Short-Term Capital Gains (STCG): ₹${shortTermCapitalGains.toLocaleString("en-IN")}
+    - Dividend Income: ₹${dividendIncome.toLocaleString("en-IN")}
+    - Total Income: ₹${totalIncome.toLocaleString("en-IN")}
+
+    Based on this data, please provide a detailed list of tax-saving strategies, including:
+    1. Specific investment options or deductions they can claim (e.g., ELSS, PPF, NSC, etc.).
+    2. Ways to optimize capital gains tax (e.g., loss harvesting, reinvestment options).
+    3. Any other relevant tax-saving opportunities specific to their income profile.
+    4. Estimated tax savings where possible.
+
+    Format your response as a concise, readable list with clear explanations.
+  `;
+
   return new Promise((resolve) => {
     setTimeout(() => {
-      const { userIncome, longTermCapitalGains, shortTermCapitalGains, dividendIncome } = taxData;
-      const totalIncome = userIncome + longTermCapitalGains + shortTermCapitalGains + dividendIncome;
-
       let suggestion = "";
+
       if (userIncome > 1000000) {
-        suggestion += "Invest in ELSS funds to claim ₹1.5L deduction under Section 80C.\n";
+        suggestion += "1. Section 80C Deduction: Invest up to ₹1.5 lakh in Equity-Linked Savings Schemes (ELSS) to reduce taxable income. ELSS offers tax benefits and potential equity returns. Estimated savings: ₹31,200 (assuming 20% tax slab).\n";
+        suggestion += "2. Section 80D: Purchase health insurance for self and family (up to ₹25,000 for self, ₹50,000 for senior citizen parents) to claim additional deductions. Estimated savings: ₹5,200-₹10,400.\n";
       } else {
-        suggestion += "Maximize Section 80C deductions up to ₹1.5L with PPF or NSC.\n";
+        suggestion += "1. Section 80C Deduction: Maximize your ₹1.5 lakh limit with Public Provident Fund (PPF) or National Savings Certificate (NSC) for safe, tax-free returns. Estimated savings: ₹15,600 (assuming 10% tax slab).\n";
       }
 
       if (longTermCapitalGains > 100000) {
-        suggestion += "Offset LTCG by booking losses or reinvesting in Section 54 assets.";
+        suggestion += `2. LTCG Optimization: Offset LTCG by booking capital losses from underperforming assets (tax loss harvesting). Alternatively, reinvest gains in residential property under Section 54 (exemption up to ₹2 crore if reinvested). Estimated savings: ₹${(longTermCapitalGains * 0.1).toLocaleString("en-IN")} (10% LTCG tax).\n`;
       } else if (shortTermCapitalGains > 0) {
-        suggestion += "Reduce STCG tax by holding assets longer for LTCG benefits.";
+        suggestion += `2. STCG Strategy: Hold assets for over 1 year to convert STCG (taxed at 15%) into LTCG (taxed at 10% with ₹1 lakh exemption). Estimated savings: ₹${(shortTermCapitalGains * 0.05).toLocaleString("en-IN")} (difference between 15% and 10%).\n`;
       } else {
-        suggestion += "Maintain current strategy; no immediate tax-saving needed.";
+        suggestion += "2. Capital Gains: No immediate action needed; maintain current strategy as capital gains are minimal.\n";
       }
 
+      suggestion +=`3. Dividend Income: Since dividend income is tax-free up to ₹10 lakh under Section 115BBDA (for FY ${taxYear}), no additional tax-saving action is required unless it exceeds this limit.\n`;
+      suggestion += `4. Other Options: Consider National Pension System (NPS) under Section 80CCD(1B) for an additional ₹50,000 deduction. Estimated savings: ₹10,400 (assuming 20% tax slab).\n`;
+
       resolve(suggestion.trim());
-    }, 1000);
+    }, 1000); // Simulate network delay
   });
 };
 
@@ -284,17 +309,77 @@ export default function FinancialCalculators() {
       )}
 
       <Tabs defaultValue="tax" className="w-full">
-        <TabsList className="w-full bg-white/5 p-1 rounded-lg mb-6 flex flex-wrap">
-          <TabsTrigger value="tax">Tax</TabsTrigger>
-          <TabsTrigger value="fd">FD</TabsTrigger>
-          <TabsTrigger value="loan">Loan</TabsTrigger>
-          <TabsTrigger value="compound">Compound Interest</TabsTrigger>
-          <TabsTrigger value="nps">NPS</TabsTrigger>
-          <TabsTrigger value="rd">RD</TabsTrigger>
-          <TabsTrigger value="ppf">PPF</TabsTrigger>
-          <TabsTrigger value="epf">EPF</TabsTrigger>
-          <TabsTrigger value="sip">SIP</TabsTrigger>
-          <TabsTrigger value="lumpsum">Lumpsum</TabsTrigger>
+        <TabsList className="w-full bg-gradient-to-r from-gray-800/80 via-gray-900/90 to-gray-800/80 p-2 rounded-xl mb-6 flex flex-wrap gap-2 shadow-lg border border-gray-700/50 backdrop-blur-sm mb-6">
+          <TabsTrigger 
+            value="tax" 
+            className="relative px-4 py-2 text-sm font-medium text-gray-300 rounded-lg transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-purple-600/20 hover:to-indigo-600/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
+            <span className="relative z-10">Tax</span>
+            <span className="absolute inset-0 rounded-lg bg-purple-500/10 opacity-0 hover:opacity-100 transition-opacity duration-300" />
+          </TabsTrigger>
+          <TabsTrigger 
+            value="fd" 
+            className="relative px-4 py-2 text-sm font-medium text-gray-300 rounded-lg transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-purple-600/20 hover:to-indigo-600/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
+            <span className="relative z-10">FD</span>
+            <span className="absolute inset-0 rounded-lg bg-purple-500/10 opacity-0 hover:opacity-100 transition-opacity duration-300" />
+          </TabsTrigger>
+          <TabsTrigger 
+            value="loan" 
+            className="relative px-4 py-2 text-sm font-medium text-gray-300 rounded-lg transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-purple-600/20 hover:to-indigo-600/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
+            <span className="relative z-10">Loan</span>
+            <span className="absolute inset-0 rounded-lg bg-purple-500/10 opacity-0 hover:opacity-100 transition-opacity duration-300" />
+          </TabsTrigger>
+          <TabsTrigger 
+            value="compound" 
+            className="relative px-4 py-2 text-sm font-medium text-gray-300 rounded-lg transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-purple-600/20 hover:to-indigo-600/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
+            <span className="relative z-10">Compound Interest</span>
+            <span className="absolute inset-0 rounded-lg bg-purple-500/10 opacity-0 hover:opacity-100 transition-opacity duration-300" />
+          </TabsTrigger>
+          <TabsTrigger 
+            value="nps" 
+            className="relative px-4 py-2 text-sm font-medium text-gray-300 rounded-lg transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-purple-600/20 hover:to-indigo-600/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
+            <span className="relative z-10">NPS</span>
+            <span className="absolute inset-0 rounded-lg bg-purple-500/10 opacity-0 hover:opacity-100 transition-opacity duration-300" />
+          </TabsTrigger>
+          <TabsTrigger 
+            value="rd" 
+            className="relative px-4 py-2 text-sm font-medium text-gray-300 rounded-lg transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-purple-600/20 hover:to-indigo-600/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
+            <span className="relative z-10">RD</span>
+            <span className="absolute inset-0 rounded-lg bg-purple-500/10 opacity-0 hover:opacity-100 transition-opacity duration-300" />
+          </TabsTrigger>
+          <TabsTrigger 
+            value="ppf" 
+            className="relative px-4 py-2 text-sm font-medium text-gray-300 rounded-lg transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-purple-600/20 hover:to-indigo-600/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
+            <span className="relative z-10">PPF</span>
+            <span className="absolute inset-0 rounded-lg bg-purple-500/10 opacity-0 hover:opacity-100 transition-opacity duration-300" />
+          </TabsTrigger>
+          <TabsTrigger 
+            value="epf" 
+            className="relative px-4 py-2 text-sm font-medium text-gray-300 rounded-lg transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-purple-600/20 hover:to-indigo-600/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
+            <span className="relative z-10">EPF</span>
+            <span className="absolute inset-0 rounded-lg bg-purple-500/10 opacity-0 hover:opacity-100 transition-opacity duration-300" />
+          </TabsTrigger>
+          <TabsTrigger 
+            value="sip" 
+            className="relative px-4 py-2 text-sm font-medium text-gray-300 rounded-lg transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-purple-600/20 hover:to-indigo-600/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
+            <span className="relative z-10">SIP</span>
+            <span className="absolute inset-0 rounded-lg bg-purple-500/10 opacity-0 hover:opacity-100 transition-opacity duration-300" />
+          </TabsTrigger>
+          <TabsTrigger 
+            value="lumpsum" 
+            className="relative px-4 py-2 text-sm font-medium text-gray-300 rounded-lg transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-purple-600/20 hover:to-indigo-600/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
+            <span className="relative z-10">Lumpsum</span>
+            <span className="absolute inset-0 rounded-lg bg-purple-500/10 opacity-0 hover:opacity-100 transition-opacity duration-300" />
+          </TabsTrigger>
         </TabsList>
 
         {/* Tax Calculator */}
@@ -305,12 +390,16 @@ export default function FinancialCalculators() {
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">Tax Year</label>
                   <Select value={taxYear} onValueChange={setTaxYear}>
-                    <SelectTrigger className="bg-white/5 border-white/10">
+                    <SelectTrigger className="bg-white/5 border-white/10 text-gray-300 focus:ring-2 focus:ring-purple-500 rounded-lg">
                       <SelectValue placeholder="Select Year" />
                     </SelectTrigger>
-                    <SelectContent className="bg-gray-900 border-white/10">
-                      <SelectItem value="2024">FY 2024-25</SelectItem>
-                      <SelectItem value="2025">FY 2025-26</SelectItem>
+                    <SelectContent className="bg-gray-900 border border-white/10 text-white rounded-lg shadow-lg">
+                      <SelectItem value="2024" className="hover:bg-purple-600/20 focus:bg-purple-600/30 transition-colors duration-200">
+                        FY 2024-25
+                      </SelectItem>
+                      <SelectItem value="2025" className="hover:bg-purple-600/20 focus:bg-purple-600/30 transition-colors duration-200">
+                        FY 2025-26
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

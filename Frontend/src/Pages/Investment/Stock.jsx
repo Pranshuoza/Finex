@@ -22,6 +22,18 @@ const GEMINI_API_KEY = "AIzaSyBO6FEgfYf1m0QFGkj3-fo4fi5g3HqmZbs";
 const HF_API_KEY = "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";
 const TIMEOUT_MS = 20000;
 
+const fallbackPortfolio = [
+  { symbol: "HEROMOTOCO", sector: "Others", netQty: 1, avgPrice: 5940, ltp: 3629, currentValue: 3629, overallPL: -2311, overallPercentage: -38.91 },
+  { symbol: "BAJAJHFL", sector: "Others", netQty: 150, avgPrice: 138, ltp: 123.61, currentValue: 18541.5, overallPL: -2158.5, overallPercentage: -10.43 },
+  { symbol: "ADANIENSOL", sector: "Others", netQty: 10, avgPrice: 950, ltp: 831.7, currentValue: 8317, overallPL: -1183, overallPercentage: -12.45 },
+  { symbol: "NOCIL", sector: "Others", netQty: 75, avgPrice: 241.68, ltp: 191.08, currentValue: 14331, overallPL: -3795, overallPercentage: -20.94 },
+  { symbol: "IREDA", sector: "Others", netQty: 50, avgPrice: 239, ltp: 154.82, currentValue: 7741, overallPL: -4209, overallPercentage: -35.22 },
+  { symbol: "ADANIGREEN", sector: "Others", netQty: 20, avgPrice: 913.85, ltp: 954.25, currentValue: 19085, overallPL: 808, overallPercentage: 4.42 },
+  { symbol: "ZOMATO", sector: "Others", netQty: 50, avgPrice: 215, ltp: 227.52, currentValue: 11376, overallPL: 626, overallPercentage: 5.82 },
+  { symbol: "NTPC", sector: "Others", netQty: 1, avgPrice: 435.55, ltp: 351.3, currentValue: 351.3, overallPL: -84.25, overallPercentage: -19.34 },
+  { symbol: "HDFCBANK", sector: "Others", netQty: 1, avgPrice: 1777, ltp: 1770.35, currentValue: 1770.35, overallPL: -6.65, overallPercentage: -0.37 },
+];
+
 export default function Dashboard() {
   const [dailyData, setDailyData] = useState([]);
   const [monthlyData, setMonthlyData] = useState([]);
@@ -51,44 +63,28 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
 
-  const [diversificationData, setDiversificationData] = useState({
-    suggestion: "",
-    detailedSuggestion: "",
-    chartData: [],
-  });
-  const [predictionData, setPredictionData] = useState({
-    suggestion: "",
-    detailedSuggestion: "",
-    chartData: [],
-  });
-  const [riskData, setRiskData] = useState({
-    suggestion: "",
-    detailedSuggestion: "",
-    chartData: [],
-    lowRiskStocks: [],
-  });
+  const [diversificationData, setDiversificationData] = useState({ suggestion: "", detailedSuggestion: "", chartData: [] });
+  const [predictionData, setPredictionData] = useState({ suggestion: "", detailedSuggestion: "", chartData: [] });
+  const [riskData, setRiskData] = useState({ suggestion: "", detailedSuggestion: "", chartData: [], lowRiskStocks: [] });
   const [divLoading, setDivLoading] = useState(true);
   const [predLoading, setPredLoading] = useState(true);
   const [riskLoading, setRiskLoading] = useState(true);
 
   const navigate = useNavigate();
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
   const fetchStockData = async () => {
     try {
       const token = localStorage.getItem("token") || "";
       const response = await fetch(`${BASE_API_URL}/allstocks`, {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "x-access-token": token,
-        },
+        headers: { "Content-Type": "application/json", "x-access-token": token },
       });
-      if (!response.ok)
-        throw new Error(`Failed to fetch stock data: ${response.statusText}`);
+      if (!response.ok) throw new Error(`Failed to fetch stock data: ${response.statusText}`);
       const data = await response.json();
       console.log("AI Stock Data:", data);
+      console.log("monthlyData", monthlyData);
       return data;
     } catch (error) {
       console.error("Error fetching stock data for AI:", error);
@@ -97,53 +93,47 @@ export default function Dashboard() {
   };
 
   const fetchData = async (endpoint, token) => {
-    const response = await fetch(`${BASE_API_URL}${endpoint}`, {
-      headers: { "x-access-token": token },
-    });
+    const response = await fetch(`${BASE_API_URL}${endpoint}`, { headers: { "x-access-token": token } });
     if (!response.ok) throw new Error(await response.text());
     return response.json();
   };
 
+  // Mock Gemini API responses based on fallbackPortfolio
   const fetchGeminiSuggestion = async (prompt) => {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-      const result = await model.generateContent(prompt, {
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      const text = result.response.text().trim();
-      return text.split("\n").slice(0, 2).join("\n");
-    } catch (error) {
-      console.error("Gemini SDK error:", error.message);
-      return "API error occurred.\nPlease try again.";
-    }
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        if (prompt.includes("diversification strategy")) {
+          resolve("Shift 30% to Banking and 20% to Tech.\nReduce Others from 100% to 40%.");
+        } else if (prompt.includes("actionable steps") && prompt.includes("Shift 30% to Banking")) {
+          resolve("Buy ₹20K HDFCBANK and ₹15K TCS.\nSell ₹25K of IREDA and HEROMOTOCO.");
+        } else if (prompt.includes("Predict portfolio performance")) {
+          resolve("Expect 5-7% growth in 6 months.\nZOMATO and ADANIGREEN to offset losses.");
+        } else if (prompt.includes("key factors")) {
+          resolve("ZOMATO’s 5.82% gain boosts upside.\nHEROMOTOCO’s -38.91% drags performance.");
+        } else if (prompt.includes("risk profile")) {
+          resolve("High risk with 100% in volatile Others.\nHEROMOTOCO and IREDA increase exposure.");
+        } else if (prompt.includes("mitigation steps") && prompt.includes("High risk")) {
+          resolve("Reduce IREDA by 50% (₹3.8K).\nAdd ₹10K in RELIANCE for stability.");
+        } else if (prompt.includes("low-risk stocks")) {
+          resolve("HDFCBANK: Low volatility at -0.37%.\nRELIANCE: Steady conglomerate.\nINFY: Reliable tech growth.");
+        } else {
+          resolve("Mock Gemini response.\nAdjust prompt for specific data.");
+        }
+      }, 1000); // Simulate API delay
+    });
   };
 
+  // Mock Hugging Face API responses based on fallbackPortfolio
   const fetchHFSuggestion = async (prompt) => {
-    try {
-      const response = await fetch(
-        "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${HF_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            inputs: prompt,
-            parameters: { max_length: 100 },
-          }),
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        if (prompt.includes("Predict portfolio performance")) {
+          resolve("Moderate 6% growth potential.\nHigh volatility in IREDA limits gains.");
+        } else {
+          resolve("Mock HF response.\nAdjust prompt for specific data.");
         }
-      );
-      if (!response.ok) throw new Error("Hugging Face API error");
-      const data = await response.json();
-      const text = data.generated_text || "Prediction unavailable.";
-      return text.split("\n").slice(0, 2).join("\n");
-    } catch (error) {
-      console.error("Error fetching Hugging Face suggestion:", error);
-      return "Unable to fetch prediction.\nDefault analysis applied.";
-    }
+      }, 1000); // Simulate API delay
+    });
   };
 
   useEffect(() => {
@@ -156,9 +146,8 @@ export default function Dashboard() {
           return;
         }
 
-        const profileData = await fetchData("/profile", token);
-        if (profileData.status !== "ok" || !profileData.profile)
-          throw new Error("Failed to fetch profile");
+        const profileData = await fetchData("/profile", token.replace("/stocks", ""));
+        if (profileData.status !== "ok" || !profileData.profile) throw new Error("Failed to fetch profile");
         setHasUpstoxToken(!!profileData.profile.upstoxAccessToken);
 
         if (!profileData.profile.upstoxAccessToken) {
@@ -173,56 +162,32 @@ export default function Dashboard() {
           avgPrice: stock.purchasePrice,
           ltp: stock.currentPrice,
           currentValue: stock.currentPrice * stock.quantity,
-          overallPL:
-            (stock.currentPrice - stock.purchasePrice) * stock.quantity,
-          overallPercentage: stock.purchasePrice
-            ? ((stock.currentPrice - stock.purchasePrice) /
-                stock.purchasePrice) *
-              100
-            : 0,
+          overallPL: (stock.currentPrice - stock.purchasePrice) * stock.quantity,
+          overallPercentage: stock.purchasePrice ? ((stock.currentPrice - stock.purchasePrice) / stock.purchasePrice) * 100 : 0,
           stockId: stock._id,
-          sector: stock.tradingSymbol.startsWith("BANK")
-            ? "Banking"
-            : stock.tradingSymbol.startsWith("TECH")
-            ? "Tech"
-            : stock.tradingSymbol.startsWith("INFRA")
-            ? "Infra"
-            : "Others",
+          sector: stock.tradingSymbol.startsWith("BANK") ? "Banking" :
+                  stock.tradingSymbol.startsWith("TECH") ? "Tech" :
+                  stock.tradingSymbol.startsWith("INFRA") ? "Infra" : "Others",
         }));
         setPortfolioData(transformedPortfolio);
 
-        const totalInv = stocks.reduce(
-          (sum, stock) => sum + stock.purchasePrice * stock.quantity,
-          0
-        );
-        const currValue = stocks.reduce(
-          (sum, stock) => sum + stock.currentPrice * stock.quantity,
-          0
-        );
+        const totalInv = stocks.reduce((sum, stock) => sum + stock.purchasePrice * stock.quantity, 0);
+        const currValue = stocks.reduce((sum, stock) => sum + stock.currentPrice * stock.quantity, 0);
         setTotalInvestments(totalInv);
         setCurrentValue(currValue);
         setOverallPL(currValue - totalInv);
 
         const { daily, monthly } = await fetchData("/portfolio/history", token);
-        setDailyData(
-          daily.map((item) => ({
-            name: new Date(item.date).toLocaleDateString("en-IN", {
-              day: "numeric",
-              month: "short",
-            }),
-            value: item.value || 0,
-          }))
-        );
-        setMonthlyData(
-          monthly.map((item) => ({
-            name: new Date(`${item.date}-01`).toLocaleString("en-IN", {
-              month: "short",
-              year: "numeric",
-            }),
-            value: item.value || 0,
-          }))
-        );
+        setDailyData(daily.map((item) => ({
+          name: new Date(item.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+          value: item.value || 0,
+        })));
+        setMonthlyData(monthly.map((item) => ({
+          name: new Date(`${item.date}-01`).toLocaleString("en-IN", { month: "short", year: "numeric" }),
+          value: item.value || 0,
+        })));
 
+        console.log("Monthly Data", monthlyData);
         setLoading(false);
       } catch (error) {
         console.error("Error fetching dashboard data:", error.message);
@@ -233,104 +198,66 @@ export default function Dashboard() {
     fetchDashboardData();
   }, [navigate]);
 
-  const generateDiversificationData = (portfolio) => {
-    if (!portfolio || portfolio.length === 0) {
-      return [{ name: "No Data", currentWeight: 100, suggestedWeight: 100 }];
-    }
-    const totalValue =
-      portfolio.reduce((sum, stock) => sum + stock.currentValue, 0) || 100000;
-    const currentDist = portfolio.reduce((acc, stock) => {
+  // Diversification Data based on fallbackPortfolio
+  const generateDiversificationData = () => {
+    const totalValue = fallbackPortfolio.reduce((sum, stock) => sum + stock.currentValue, 0);
+    const currentDist = fallbackPortfolio.reduce((acc, stock) => {
       acc[stock.sector] = (acc[stock.sector] || 0) + stock.currentValue;
       return acc;
     }, {});
 
     const suggestedDist = {
-      Banking: 0.4 * 100, // Convert to percentage
-      Tech: 0.3 * 100,
-      Infra: 0.2 * 100,
-      Others: 0.1 * 100,
+      Banking: totalValue * 0.3, // 30%
+      Tech: totalValue * 0.2,    // 20%
+      Infra: totalValue * 0.1,   // 10%
+      Others: totalValue * 0.4,  // 40%
     };
 
-    return Object.keys(currentDist).map((sector) => ({
-      name: sector,
-      currentWeight: (currentDist[sector] / totalValue) * 100 || 0,
-      suggestedWeight: suggestedDist[sector] || 5, // Default to 5% if sector not predefined
-    }));
+    return [
+      { name: "Banking", currentWeight: 0, suggestedWeight: (suggestedDist.Banking / totalValue) * 100 },
+      { name: "Tech", currentWeight: 0, suggestedWeight: (suggestedDist.Tech / totalValue) * 100 },
+      { name: "Infra", currentWeight: 0, suggestedWeight: (suggestedDist.Infra / totalValue) * 100 },
+      { name: "Others", currentWeight: (currentDist.Others / totalValue) * 100, suggestedWeight: (suggestedDist.Others / totalValue) * 100 },
+    ];
   };
 
-  const generatePredictionData = (monthlyData, portfolio) => {
-    const totalValue =
-      portfolio.length > 0
-        ? portfolio.reduce((sum, stock) => sum + stock.currentValue, 0)
-        : 100000;
-    if (!monthlyData || monthlyData.length === 0) {
-      return Array(18)
-        .fill(0)
-        .map((_, i) => ({
-          name: `M${i + 1}`,
-          current: i < 12 ? totalValue : null,
-          predicted: i >= 12 ? totalValue * (1 + (i - 11) * 0.02) : null,
-        }));
-    }
+  // Prediction Data based on fallbackPortfolio
+  const generatePredictionData = () => {
+    const totalCurrentValue = fallbackPortfolio.reduce((sum, stock) => sum + stock.currentValue, 0);
+    const mockMonthlyData = [
+      { name: "Apr 2024", value: 91772.6 },
+      { name: "May 2024", value: 93585.15 },
+      { name: "Jun 2024", value: 93633.75 },
+      { name: "Jul 2024", value: 105239.95 },
+      { name: "Aug 2024", value: 100145.75 },
+      { name: "Sept 2024", value: 126332.4 },
+      { name: "Oct 2024", value: 113159.9 },
+      { name: "Nov 2024", value: 106200.9 },
+      { name: "Dec 2024", value: 97198.3 },
+      { name: "Jan 2025", value: 89871.65 },
+      { name: "Feb 2025", value: 75913.2 },
+      { name: "Mar 2025", value: 85142.15 },
+    ];
 
-    const x = monthlyData.map((_, i) => i);
-    const y = monthlyData.map((d) => d.value || totalValue);
-    const n = x.length;
-    const sumX = x.reduce((a, b) => a + b, 0);
-    const sumY = y.reduce((a, b) => a + b, 0);
-    const sumXY = x.reduce((sum, xi, i) => sum + xi * y[i], 0);
-    const sumXX = x.reduce((sum, xi) => sum + xi * xi, 0);
-    const slope =
-      n * sumXX - sumX * sumX
-        ? (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX)
-        : 0;
-    const intercept = n ? (sumY - slope * sumX) / n : totalValue;
+    const futureMonths = [
+      { name: "Mar 2025", predicted: 85142.15 },
+      { name: "Apr 2025", predicted: 87142.15 },
+      { name: "May 2025", predicted: 88642.15 },
+      { name: "Jun 2025", predicted: 87197.15 },
+      { name: "Jul 2025", predicted: 90278.4 },
+      { name: "Aug 2025", predicted: 91695.32 },
+      { name: "Sep 2025", predicted: 91185.82 },
+    ];
 
-    const pastMonths = monthlyData.map((item) => ({
-      name: item.name,
-      current: item.value || totalValue,
-    }));
-
-    const futureMonths = [];
-    for (let i = 0; i < 6; i++) {
-      const xFuture = n + i;
-      const predictedValue = Math.max(
-        slope * xFuture + intercept,
-        totalValue * 0.95
-      );
-      const lastDate = new Date(
-        `${monthlyData[monthlyData.length - 1].date}-01`
-      );
-      lastDate.setMonth(lastDate.getMonth() + i + 1);
-      futureMonths.push({
-        name: lastDate.toLocaleString("en-IN", {
-          month: "short",
-          year: "numeric",
-        }),
-        predicted: predictedValue,
-      });
-    }
-
-    return [...pastMonths, ...futureMonths];
+    return [...mockMonthlyData.map(d => ({ ...d, current: d.value })), ...futureMonths.map(d => ({ ...d, current: null }))];
   };
 
-  const generateRiskData = (portfolio) => {
-    if (!portfolio || portfolio.length === 0) {
-      return [{ name: "No Data", value: 100000, risk: "Unknown" }];
-    }
-    const total =
-      portfolio.reduce((sum, stock) => sum + stock.currentValue, 0) || 100000;
-    const riskPerStock = portfolio.map((stock) => {
-      const volatility = stock.avgPrice
-        ? Math.abs((stock.ltp - stock.avgPrice) / stock.avgPrice) * 100
-        : 0;
-      const risk = volatility > 10 ? "High" : volatility > 5 ? "Medium" : "Low";
-      return {
-        name: stock.symbol,
-        value: stock.currentValue || 0,
-        risk,
-        sector: stock.sector,
-      };
+  // Risk Data based on fallbackPortfolio
+  const generateRiskData = () => {
+    const riskPerStock = fallbackPortfolio.map(stock => {
+      const volatility = Math.abs(stock.overallPercentage);
+      const risk = volatility > 20 ? "High" : volatility > 10 ? "Medium" : "Low";
+      return { name: stock.symbol, value: stock.currentValue, risk, sector: stock.sector };
     });
 
     const sectorRisk = riskPerStock.reduce((acc, stock) => {
@@ -363,105 +290,47 @@ export default function Dashboard() {
 
   const fetchAIDiversification = async () => {
     setDivLoading(true);
-    const aiPortfolioData = await fetchStockData();
-    const portfolioStr = JSON.stringify(
-      aiPortfolioData.map((s) => ({
-        symbol: s.tradingSymbol,
-        currentValue: s.currentPrice * s.quantity,
-      }))
-    );
-    const suggestion = await fetchGeminiSuggestion(
-      `Provide a 1-2 line diversification strategy for this portfolio: ${portfolioStr}. Limit to 2 lines.`
-    );
-    const detailedSuggestion = await fetchGeminiSuggestion(
-      `Based on "${suggestion}", suggest 1-2 actionable steps for this portfolio: ${portfolioStr}. Limit to 2 lines.`
-    );
+    const suggestion = await fetchGeminiSuggestion("Provide a 1-2 line diversification strategy for this portfolio.");
+    const detailedSuggestion = await fetchGeminiSuggestion(`Based on "${suggestion}", suggest 1-2 actionable steps for this portfolio.`);
     setDiversificationData({
       suggestion,
       detailedSuggestion,
-      chartData: generateDiversificationData(aiPortfolioData),
+      chartData: generateDiversificationData(),
     });
     setDivLoading(false);
   };
 
   const fetchAIPrediction = async () => {
     setPredLoading(true);
-    const aiPortfolioData = await fetchStockData();
-    const portfolioStr = JSON.stringify(
-      aiPortfolioData.map((s) => ({
-        symbol: s.tradingSymbol,
-        currentValue: s.currentPrice * s.quantity,
-      }))
-    );
-    const monthlyDataStr = JSON.stringify(monthlyData);
-    const totalValue =
-      aiPortfolioData.reduce(
-        (sum, stock) => sum + stock.currentPrice * stock.quantity,
-        0
-      ) || 100000;
-
-    const geminiSuggestion =
-      totalValue === 0 || monthlyData.length === 0
-        ? "Insufficient data for prediction.\nEnsure valid value and history."
-        : await fetchGeminiSuggestion(
-            `Predict portfolio performance for the next 6 months in 1-2 lines based on value: ${totalValue}, last 12 months: ${monthlyDataStr}, portfolio: ${portfolioStr}.`
-          );
-    const hfSuggestion =
-      totalValue === 0 || monthlyData.length === 0
-        ? "Data insufficient for analysis.\nSync portfolio for better insights."
-        : await fetchHFSuggestion(
-            `Predict portfolio performance for the next 6 months based on value: ${totalValue}, last 12 months: ${monthlyDataStr}, portfolio: ${portfolioStr}. Limit to 2 lines.`
-          );
-    const suggestion = `Gemini: ${geminiSuggestion}\nHF: ${hfSuggestion}`;
-    const detailedSuggestion =
-      totalValue === 0 || monthlyData.length === 0
-        ? "Add valid portfolio value.\nProvide 12+ months of data."
-        : await fetchGeminiSuggestion(
-            `List 1-2 key factors for "${geminiSuggestion}" based on data: ${monthlyDataStr}, portfolio: ${portfolioStr}.`
-          );
-
+    const geminiSuggestion = await fetchGeminiSuggestion("Predict portfolio performance for the next 6 months in 1-2 lines.");
+    const hfSuggestion = await fetchHFSuggestion("Predict portfolio performance for the next 6 months.");
+    const suggestion = `${geminiSuggestion}\nHF: ${hfSuggestion}`;
+    const detailedSuggestion = await fetchGeminiSuggestion(`List 1-2 key factors for "${geminiSuggestion}".`);
     setPredictionData({
       suggestion,
       detailedSuggestion,
-      chartData: generatePredictionData(monthlyData, aiPortfolioData),
+      chartData: generatePredictionData(),
     });
     setPredLoading(false);
   };
 
   const fetchAIRisk = async () => {
     setRiskLoading(true);
-    const aiPortfolioData = await fetchStockData();
-    const portfolioStr = JSON.stringify(
-      aiPortfolioData.map((s) => ({
-        symbol: s.tradingSymbol,
-        currentValue: s.currentPrice * s.quantity,
-      }))
-    );
-    const suggestion = await fetchGeminiSuggestion(
-      `Assess the risk profile in 1-2 lines for this portfolio: ${portfolioStr}.`
-    );
-    const detailedSuggestion = await fetchGeminiSuggestion(
-      `Suggest 1-2 mitigation steps for "${suggestion}" based on this portfolio: ${portfolioStr}.`
-    );
-    const lowRiskStocks = await fetchGeminiSuggestion(
-      `Recommend 3 low-risk stocks for this portfolio in 3 lines: ${portfolioStr}.`
-    );
+    const suggestion = await fetchGeminiSuggestion("Assess the risk profile in 1-2 lines for this portfolio.");
+    const detailedSuggestion = await fetchGeminiSuggestion(`Suggest 1-2 mitigation steps for "${suggestion}".`);
+    const lowRiskStocks = await fetchGeminiSuggestion("Recommend 3 low-risk stocks for this portfolio in 3 lines.");
     setRiskData({
       suggestion,
       detailedSuggestion,
-      chartData: generateRiskData(aiPortfolioData),
-      lowRiskStocks: lowRiskStocks.split("\n").filter((s) => s.trim()),
+      chartData: generateRiskData(),
+      lowRiskStocks: lowRiskStocks.split('\n').filter(s => s.trim()),
     });
     setRiskLoading(false);
   };
 
   useEffect(() => {
     if (!loading && hasUpstoxToken) {
-      Promise.all([
-        fetchAIDiversification(),
-        fetchAIPrediction(),
-        fetchAIRisk(),
-      ]);
+      Promise.all([fetchAIDiversification(), fetchAIPrediction(), fetchAIRisk()]);
     }
   }, [loading, hasUpstoxToken]);
 
@@ -477,38 +346,10 @@ export default function Dashboard() {
 
   const getModalContent = () => {
     switch (activeTab) {
-      case 0:
-        return divLoading
-          ? {
-              suggestion: "Loading...",
-              detailedSuggestion: "Please wait...",
-              chartData: [],
-            }
-          : diversificationData;
-      case 1:
-        return predLoading
-          ? {
-              suggestion: "Loading...",
-              detailedSuggestion: "Please wait...",
-              chartData: [],
-            }
-          : predictionData;
-      case 2:
-        return riskLoading
-          ? {
-              suggestion: "Loading...",
-              detailedSuggestion: "Please wait...",
-              chartData: [],
-              lowRiskStocks: [],
-            }
-          : riskData;
-      default:
-        return {
-          suggestion: "",
-          detailedSuggestion: "",
-          chartData: [],
-          lowRiskStocks: [],
-        };
+      case 0: return divLoading ? { suggestion: "Loading...", detailedSuggestion: "Please wait...", chartData: [] } : diversificationData;
+      case 1: return predLoading ? { suggestion: "Loading...", detailedSuggestion: "Please wait...", chartData: [] } : predictionData;
+      case 2: return riskLoading ? { suggestion: "Loading...", detailedSuggestion: "Please wait...", chartData: [], lowRiskStocks: [] } : riskData;
+      default: return { suggestion: "", detailedSuggestion: "", chartData: [], lowRiskStocks: [] };
     }
   };
 
@@ -526,59 +367,32 @@ export default function Dashboard() {
         ltp: stock.currentPrice,
         currentValue: stock.currentPrice * stock.quantity,
         overallPL: (stock.currentPrice - stock.purchasePrice) * stock.quantity,
-        overallPercentage: stock.purchasePrice
-          ? ((stock.currentPrice - stock.purchasePrice) / stock.purchasePrice) *
-            100
-          : 0,
+        overallPercentage: stock.purchasePrice ? ((stock.currentPrice - stock.purchasePrice) / stock.purchasePrice) * 100 : 0,
         stockId: stock._id,
-        sector: stock.tradingSymbol.startsWith("BANK")
-          ? "Banking"
-          : stock.tradingSymbol.startsWith("TECH")
-          ? "Tech"
-          : stock.tradingSymbol.startsWith("INFRA")
-          ? "Infra"
-          : "Others",
+        sector: stock.tradingSymbol.startsWith("BANK") ? "Banking" :
+                stock.tradingSymbol.startsWith("TECH") ? "Tech" :
+                stock.tradingSymbol.startsWith("INFRA") ? "Infra" : "Others",
       }));
       setPortfolioData(transformedPortfolio);
 
-      const totalInv = stocks.reduce(
-        (sum, stock) => sum + stock.purchasePrice * stock.quantity,
-        0
-      );
-      const currValue = stocks.reduce(
-        (sum, stock) => sum + stock.currentPrice * stock.quantity,
-        0
-      );
+      const totalInv = stocks.reduce((sum, stock) => sum + stock.purchasePrice * stock.quantity, 0);
+      const currValue = stocks.reduce((sum, stock) => sum + stock.currentPrice * stock.quantity, 0);
       setTotalInvestments(totalInv);
       setCurrentValue(currValue);
       setOverallPL(currValue - totalInv);
 
       const { daily, monthly } = await fetchData("/portfolio/history", token);
-      setDailyData(
-        daily.map((item) => ({
-          name: new Date(item.date).toLocaleDateString("en-IN", {
-            day: "numeric",
-            month: "short",
-          }),
-          value: item.value || 0,
-        }))
-      );
-      setMonthlyData(
-        monthly.map((item) => ({
-          name: new Date(`${item.date}-01`).toLocaleString("en-IN", {
-            month: "short",
-            year: "numeric",
-          }),
-          value: item.value || 0,
-        }))
-      );
+      setDailyData(daily.map((item) => ({
+        name: new Date(item.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+        value: item.value || 0,
+      })));
+      setMonthlyData(monthly.map((item) => ({
+        name: new Date(`${item.date}-01`).toLocaleString("en-IN", { month: "short", year: "numeric" }),
+        value: item.value || 0,
+      })));
 
       setLoading(false);
-      Promise.all([
-        fetchAIDiversification(),
-        fetchAIPrediction(),
-        fetchAIRisk(),
-      ]);
+      Promise.all([fetchAIDiversification(), fetchAIPrediction(), fetchAIRisk()]);
     } catch (error) {
       console.error("Error syncing portfolio:", error.message);
       setLoading(false);
@@ -612,19 +426,13 @@ export default function Dashboard() {
     : "0.0";
   const isNegative = percentageChange < 0;
 
-  const enrichedPortfolioData = portfolioData.map((stock) => {
-    const sectorData =
-      diversificationData.chartData.find((d) => d.name === stock.sector) || {};
-    const totalPortfolioValue =
-      portfolioData.reduce((sum, s) => sum + s.currentValue, 0) || 100000;
+  const enrichedPortfolioData = portfolioData.map(stock => {
+    const sectorData = diversificationData.chartData.find(d => d.name === stock.sector) || {};
+    const totalPortfolioValue = portfolioData.reduce((sum, s) => sum + s.currentValue, 0) || 100000;
     return {
       ...stock,
-      currentSectorAllocation: totalPortfolioValue
-        ? ((stock.currentValue / totalPortfolioValue) * 100).toFixed(2)
-        : "0.00",
-      suggestedSectorAllocation: sectorData.suggestedWeight
-        ? sectorData.suggestedWeight.toFixed(2)
-        : "N/A",
+      currentSectorAllocation: totalPortfolioValue ? (stock.currentValue / totalPortfolioValue * 100).toFixed(2) : "0.00",
+      suggestedSectorAllocation: sectorData.suggestedWeight ? sectorData.suggestedWeight.toFixed(2) : "N/A",
     };
   });
 
@@ -715,9 +523,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         <div className="col-span-2 bg-gray-900 p-5 rounded-xl">
-          <h3 className="font-medium text-white mb-4">
-            Portfolio Performance (Last 15 Days)
-          </h3>
+          <h3 className="font-medium text-white mb-4">Portfolio Performance (Last 15 Days)</h3>
           <div className="h-96 ml-4">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
@@ -726,38 +532,10 @@ export default function Dashboard() {
                 }
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis
-                  dataKey="name"
-                  stroke="#4b5563"
-                  padding={{ left: 10, right: 10 }}
-                />
-                <YAxis
-                  stroke="#4b5563"
-                  tickFormatter={(value) => `₹${value.toLocaleString("en-IN")}`}
-                  domain={["dataMin", "dataMax"]}
-                  padding={{ top: 10, bottom: 10 }}
-                  tick={{ dx: -5 }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#1e1e2d",
-                    borderColor: "#374151",
-                    borderRadius: "0.5rem",
-                  }}
-                  formatter={(value) =>
-                    `₹${value.toLocaleString("en-IN", {
-                      maximumFractionDigits: 2,
-                    })}`
-                  }
-                />
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#8b5cf6"
-                  strokeWidth={2}
-                  dot={{ r: 4, strokeWidth: 2 }}
-                  activeDot={{ r: 6 }}
-                />
+                <XAxis dataKey="name" stroke="#4b5563" padding={{ left: 10, right: 10 }} />
+                <YAxis stroke="#4b5563" tickFormatter={(value) => `₹${value.toLocaleString("en-IN")}`} domain={["dataMin", "dataMax"]} padding={{ top: 10, bottom: 10 }} tick={{ dx: -5 }} />
+                <Tooltip contentStyle={{ backgroundColor: "#1e1e2d", borderColor: "#374151", borderRadius: "0.5rem" }} formatter={(value) => `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`} />
+                <Line type="monotone" dataKey="value" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -846,103 +624,25 @@ export default function Dashboard() {
                 <ResponsiveContainer width="100%" height="100%">
                   {activeTab === 0 ? (
                     <BarChart data={getModalContent().chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                      <XAxis dataKey="name" stroke="#9ca3af" />
-                      <YAxis
-                        stroke="#9ca3af"
-                        tickFormatter={(value) => `${value}%`}
-                        domain={[0, 100]}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#1e1e2d",
-                          borderColor: "#374151",
-                          borderRadius: "0.5rem",
-                        }}
-                        formatter={(value) => `${value.toFixed(2)}%`}
-                      />
-                      <Bar
-                        dataKey="currentWeight"
-                        fill="#8b5cf6"
-                        name="Current Weight"
-                        animationDuration={1000}
-                      />
-                      <Bar
-                        dataKey="suggestedWeight"
-                        fill="#f43f5e"
-                        name="Suggested Weight"
-                        animationDuration={1000}
-                      />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" opacity={0.5} />
+                      <XAxis dataKey="name" stroke="#9ca3af" tick={{ fill: "#d1d5db" }} />
+                      <YAxis stroke="#9ca3af" tickFormatter={(value) => `${value}%`} domain={[0, 100]} tick={{ fill: "#d1d5db" }} />
+                      <Tooltip contentStyle={{ backgroundColor: "#1e1e2d", borderColor: "#374151", borderRadius: "0.5rem" }} formatter={(value) => `${value.toFixed(2)}%`} />
+                      <Bar dataKey="currentWeight" fill="#8b5cf6" name="Current" animationDuration={1000} barSize={30} />
+                      <Bar dataKey="suggestedWeight" fill="#f43f5e" name="Suggested" animationDuration={1000} barSize={30} />
                     </BarChart>
                   ) : activeTab === 1 ? (
                     <LineChart data={getModalContent().chartData}>
-                      <CartesianGrid
-                        strokeDasharray="5 5"
-                        stroke="#1f2937"
-                        opacity={0.5}
-                      />
-                      <XAxis
-                        dataKey="name"
-                        stroke="#9ca3af"
-                        interval={0}
-                        angle={-45}
-                        textAnchor="end"
-                        height={60}
-                      />
-                      <YAxis
-                        stroke="#9ca3af"
-                        tickFormatter={(value) =>
-                          `₹${value.toLocaleString("en-IN")}`
-                        }
-                        domain={["dataMin - 5000", "dataMax + 5000"]}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#1e1e2d",
-                          borderColor: "#374151",
-                          borderRadius: "0.5rem",
-                        }}
-                        formatter={(value) =>
-                          `₹${value.toLocaleString("en-IN", {
-                            maximumFractionDigits: 2,
-                          })}`
-                        }
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="current"
-                        stroke="#8b5cf6"
-                        strokeWidth={3}
-                        dot={{ r: 5, fill: "#8b5cf6" }}
-                        activeDot={{ r: 8, fill: "#fff", stroke: "#8b5cf6" }}
-                        animationDuration={1500}
-                        connectNulls
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="predicted"
-                        stroke="#f43f5e"
-                        strokeWidth={3}
-                        strokeDasharray="5 5"
-                        dot={{ r: 5, fill: "#f43f5e" }}
-                        activeDot={{ r: 8, fill: "#fff", stroke: "#f43f5e" }}
-                        animationDuration={1500}
-                        connectNulls
-                      />
+                      <CartesianGrid strokeDasharray="5 5" stroke="#1f2937" opacity={0.5} />
+                      <XAxis dataKey="name" stroke="#9ca3af" interval={0} angle={-45} textAnchor="end" height={60} tick={{ fill: "#d1d5db" }} />
+                      <YAxis stroke="#9ca3af" tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}K`} domain={['dataMin - 5000', 'dataMax + 5000']} tick={{ fill: "#d1d5db" }} />
+                      <Tooltip contentStyle={{ backgroundColor: "#1e1e2d", borderColor: "#374151", borderRadius: "0.5rem" }} formatter={(value) => `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`} />
+                      <Line type="monotone" dataKey="current" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 5, fill: "#8b5cf6" }} activeDot={{ r: 8, fill: "#fff", stroke: "#8b5cf6" }} animationDuration={1500} connectNulls />
+                      <Line type="monotone" dataKey="predicted" stroke="#f43f5e" strokeWidth={3} strokeDasharray="5 5" dot={{ r: 5, fill: "#f43f5e" }} activeDot={{ r: 8, fill: "#fff", stroke: "#f43f5e" }} animationDuration={1500} connectNulls />
                     </LineChart>
                   ) : (
                     <PieChart>
-                      <Pie
-                        data={getModalContent().chartData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) =>
-                          `${name} ${(percent * 100).toFixed(0)}%`
-                        }
-                        outerRadius={80}
-                        dataKey="value"
-                      >
+                      <Pie data={getModalContent().chartData} cx="50%" cy="50%" labelLine={true} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} outerRadius={100} dataKey="value" animationDuration={1000}>
                         {getModalContent().chartData.map((entry, index) => (
                           <Cell
                             key={`cell-${index}`}
@@ -956,17 +656,7 @@ export default function Dashboard() {
                           />
                         ))}
                       </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#1e1e2d",
-                          borderColor: "#374151",
-                          borderRadius: "0.5rem",
-                        }}
-                        formatter={(value, name, props) => [
-                          `${props.payload.risk} Risk`,
-                          name,
-                        ]}
-                      />
+                      <Tooltip contentStyle={{ backgroundColor: "#1e1e2d", borderColor: "#374151", borderRadius: "0.5rem" }} formatter={(value, name, props) => [`${props.payload.risk} Risk`, `₹${value.toLocaleString("en-IN")}`]} />
                     </PieChart>
                   )}
                 </ResponsiveContainer>
@@ -982,30 +672,11 @@ export default function Dashboard() {
         </h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={
-                monthlyData.length
-                  ? monthlyData
-                  : [{ name: "No Data", value: 0 }]
-              }
-            >
+            <BarChart data={monthlyData.length ? monthlyData : [{ name: "No Data", value: 0 }]}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
               <XAxis dataKey="name" stroke="#4b5563" />
-              <YAxis
-                stroke="#4b5563"
-                tickFormatter={(value) => `₹${value.toLocaleString("en-IN")}`}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#1e1e2d",
-                  borderColor: "#374151",
-                }}
-                formatter={(value) =>
-                  `₹${value.toLocaleString("en-IN", {
-                    maximumFractionDigits: 2,
-                  })}`
-                }
-              />
+              <YAxis stroke="#4b5563" tickFormatter={(value) => `₹${value.toLocaleString("en-IN")}`} />
+              <Tooltip contentStyle={{ backgroundColor: "#1e1e2d", borderColor: "#374151" }} formatter={(value) => `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`} />
               <Bar dataKey="value" fill="#6366f1" animationDuration={1000} />
             </BarChart>
           </ResponsiveContainer>
@@ -1040,43 +711,14 @@ export default function Dashboard() {
                     <td className="py-3 font-medium">{stock.symbol}</td>
                     <td className="py-3">{stock.sector}</td>
                     <td className="py-3">{stock.netQty}</td>
-                    <td className="py-3">
-                      ₹
-                      {stock.avgPrice.toLocaleString("en-IN", {
-                        maximumFractionDigits: 2,
-                      })}
+                    <td className="py-3">₹{stock.avgPrice.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
+                    <td className="py-3">₹{stock.ltp.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
+                    <td className="py-3">₹{stock.currentValue.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
+                    <td className={`py-3 ${stock.overallPL >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {stock.overallPL >= 0 ? "+" : ""}{stock.overallPL.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
                     </td>
-                    <td className="py-3">
-                      ₹
-                      {stock.ltp.toLocaleString("en-IN", {
-                        maximumFractionDigits: 2,
-                      })}
-                    </td>
-                    <td className="py-3">
-                      ₹
-                      {stock.currentValue.toLocaleString("en-IN", {
-                        maximumFractionDigits: 2,
-                      })}
-                    </td>
-                    <td
-                      className={`py-3 ${
-                        stock.overallPL >= 0 ? "text-green-400" : "text-red-400"
-                      }`}
-                    >
-                      {stock.overallPL >= 0 ? "+" : ""}
-                      {stock.overallPL.toLocaleString("en-IN", {
-                        maximumFractionDigits: 2,
-                      })}
-                    </td>
-                    <td
-                      className={`py-3 ${
-                        stock.overallPercentage >= 0
-                          ? "text-green-400"
-                          : "text-red-400"
-                      }`}
-                    >
-                      {stock.overallPercentage >= 0 ? "+" : ""}
-                      {stock.overallPercentage.toFixed(2)}%
+                    <td className={`py-3 ${stock.overallPercentage >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {stock.overallPercentage >= 0 ? "+" : ""}{stock.overallPercentage.toFixed(2)}%
                     </td>
                     <td className="py-3">{stock.currentSectorAllocation}%</td>
                   </tr>

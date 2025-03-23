@@ -15,6 +15,7 @@ import { FinancialChatbot } from "./Pages/ChatBot/Chatbot";
 {/*import Tax from "./Pages/Tax/Tax";*/}
 import Goals from "./Pages/Goals/Goal";
 import "./App.css";
+import CommunityPage from "./Pages/Community/Community";
 
 // Public Layout Component (without Sidebar and Navbar)
 function PublicLayout({ children }) {
@@ -201,6 +202,14 @@ function AppContent() {
         element={
           <ProtectedLayout>
             <StockApp />
+          </ProtectedLayout>
+        }
+      />
+      <Route
+        path="/community"
+        element={
+          <ProtectedLayout>
+            <CommunityPage />
           </ProtectedLayout>
         }
       />

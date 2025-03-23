@@ -49,6 +49,7 @@ import {
   DialogTrigger,
 } from "../../Components/ui/dialog";
 import { Progress } from "../../Components/ui/progress";
+import { useNavigate } from "react-router-dom";
 
 // Mock socket implementation (client-side only)
 const mockSocket = {
@@ -485,7 +486,8 @@ export default function CommunityPage() {
   });
   const [stocks, setStocks] = useState([]);
   const socketRef = useRef(null);
-
+  const navigate = useNavigate();
+  
   useEffect(() => {
     // Initialize mock socket
     socketRef.current = mockSocket;
@@ -1167,7 +1169,7 @@ export default function CommunityPage() {
                   <AvatarFallback>YP</AvatarFallback>
                 </Avatar>
                 <div>
-                  <h3 className="font-medium">Your Profile</h3>
+                  <h3 className="font-medium">Profile</h3>
                   <p className="text-sm text-gray-400">Retail Investor</p>
                 </div>
               </div>
@@ -1191,6 +1193,7 @@ export default function CommunityPage() {
                 <Button
                   variant="outline"
                   className="w-full border-white/10 bg-white/5 hover:bg-white/10"
+                  onClick={() => navigate("/profile")}
                 >
                   View Profile
                 </Button>

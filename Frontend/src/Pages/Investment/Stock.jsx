@@ -406,10 +406,10 @@ export default function Dashboard() {
     return (
       <div className="p-4 lg:p-6 flex flex-col items-center justify-center min-h-screen">
         <h2 className="text-2xl font-semibold text-white mb-4">
-          Link Your Upstox Account
+          Link Your Demat Account
         </h2>
         <p className="text-gray-400 mb-6">
-          Connect your Upstox account to view your portfolio.
+          Connect your Demat account to view your portfolio.
         </p>
         <button
           onClick={() => navigate("/profile")}
@@ -460,17 +460,8 @@ export default function Dashboard() {
                 maximumFractionDigits: 2,
               })}
             </div>
-            <div
-              className={`flex items-center mt-2 ${
-                isNegative ? "text-red-400" : "text-green-400"
-              }`}
-            >
-              {isNegative ? (
-                <ArrowDownRight className="h-4 w-4 mr-1" />
-              ) : (
-                <ArrowUpRight className="h-4 w-4 mr-1" />
-              )}
-              <span>{percentageChange}%</span>
+            <div>
+
             </div>
           </div>
         </div>
@@ -641,23 +632,9 @@ export default function Dashboard() {
                       <Line type="monotone" dataKey="predicted" stroke="#f43f5e" strokeWidth={3} strokeDasharray="5 5" dot={{ r: 5, fill: "#f43f5e" }} activeDot={{ r: 8, fill: "#fff", stroke: "#f43f5e" }} animationDuration={1500} connectNulls />
                     </LineChart>
                   ) : (
-                    <PieChart>
-                      <Pie data={getModalContent().chartData} cx="50%" cy="50%" labelLine={true} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} outerRadius={100} dataKey="value" animationDuration={1000}>
-                        {getModalContent().chartData.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={
-                              entry.risk === "High"
-                                ? "#f43f5e"
-                                : entry.risk === "Medium"
-                                ? "#facc15"
-                                : "#22c55e"
-                            }
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={{ backgroundColor: "#1e1e2d", borderColor: "#374151", borderRadius: "0.5rem" }} formatter={(value, name, props) => [`${props.payload.risk} Risk`, `₹${value.toLocaleString("en-IN")}`]} />
-                    </PieChart>
+                    <div>
+
+                    </div>
                   )}
                 </ResponsiveContainer>
               </div>

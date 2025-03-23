@@ -1,18 +1,5 @@
 const Tax = require("../Model/Tax");
 const User = require("../Model/User");
-const jwt = require("jsonwebtoken");
-
-// Middleware to verify token
-const verifyToken = (req, res, next) => {
-  const token = req.headers["x-access-token"];
-  if (!token) return res.status(403).json({ error: "No token provided" });
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) return res.status(401).json({ error: "Unauthorized" });
-    req.userId = decoded.id; // Assuming the token contains the user ID
-    next();
-  });
-};
 
 // Tax calculation logic
 const calculateTax = (income, capitalGainsLT, capitalGainsST, dividendIncome, year) => {
@@ -94,8 +81,7 @@ const calculateTaxRoute = async (req, res) => {
 // Create tax record
 const createTaxRecord = async (req, res) => {
   try {
-    const { taxYear, userIncome, longTermCapitalGains, shortTermCapitalGains, dividendIncome } = req.body;
-    const userId = req.userId; // Extracted from token
+    const { userId, taxYear, userIncome, longTermCapitalGains, shortTermCapitalGains, dividendIncome } = req.body;
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
@@ -121,7 +107,7 @@ const createTaxRecord = async (req, res) => {
 // Get all tax records for a user
 const getAllTaxRecords = async (req, res) => {
   try {
-    const userId = req.userId; // Extracted from token
+    const { userId } = req.params;
     const taxRecords = await Tax.find({ userId }).populate("userId", "name email");
     if (!taxRecords.length) return res.status(404).json({ message: "No tax records found" });
 
@@ -188,7 +174,7 @@ const deleteTaxRecord = async (req, res) => {
 // Get total tax summary
 const getTotalTax = async (req, res) => {
   try {
-    const userId = req.userId; // Extracted from token
+    const { userId } = req.params;
     const taxRecords = await Tax.find({ userId });
     if (!taxRecords.length) return res.status(404).json({ message: "No tax records found" });
 
@@ -207,17 +193,17 @@ const getTotalTax = async (req, res) => {
       totalAmountPaid: totalTaxPaid + totalCessPaid,
     };
 
-    res.status(200).json({ message: "Complete tax summary", data: totalSummary });
+    res.status(200).json({ message: "Total tax summary", data: totalSummary });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
 module.exports = {
-  calculateTaxRoute: [verifyToken, calculateTaxRoute],
-  createTaxRecord: [verifyToken, createTaxRecord],
-  getAllTaxRecords: [verifyToken, getAllTaxRecords],
-  updateTaxRecord: [verifyToken, updateTaxRecord],
-  deleteTaxRecord: [verifyToken, deleteTaxRecord],
-  getTotalTax: [verifyToken, getTotalTax],
+  calculateTaxRoute,
+  createTaxRecord,
+  getAllTaxRecords,
+  updateTaxRecord,
+  deleteTaxRecord,
+  getTotalTax,
 };

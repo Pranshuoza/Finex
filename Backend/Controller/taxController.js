@@ -1,5 +1,5 @@
-const Tax = require("../model/Tax");
-const User = require("../model/User");
+const Tax = require("../Model/Tax");
+const User = require("../Model/User");
 const jwt = require("jsonwebtoken");
 
 const getTaxSlabs = (year) => {

@@ -20,8 +20,8 @@ const Sidebar = () => {
     <div className="w-20 lg:w-64 h-full bg-gradient-to-bl from-purple-900/20 via-gray-900/30 to-indigo-900/20 backdrop-blur-md border-r border-white/10 flex flex-col z-10 transition-all duration-300">
       {/* Logo Section */}
       <div className="p-4 border-b border-white/10 flex items-center justify-center lg:justify-start">
-        <h1 className="text-2xl font-bold text-white hidden lg:block">
-          finex<span className="text-purple-500">.</span>
+        <h1 className="text-4xl font-bold text-white hidden lg:block">
+          finex<span className="text-green-500">.</span>
         </h1>
         <span className="text-2xl font-bold text-white lg:hidden">
           f<span className="text-purple-500">.</span>

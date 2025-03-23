@@ -1,20 +1,30 @@
 import { useState, useEffect } from "react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
-import { ChevronDown, ArrowUpRight, ArrowDownRight, Zap, Star } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
+import { ChevronDown, ArrowUpRight, ArrowDownRight, Zap, Star, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
 const BASE_API_URL = "http://localhost:3000/stocks";
+const GEMINI_API_KEY = "AIzaSyBO6FEgfYf1m0QFGkj3-fo4fi5g3HqmZbs"; // Replace with your Gemini API key
+const HF_API_TOKEN = "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"; // Your Hugging Face API token
 
 export default function Dashboard() {
   const [dailyData, setDailyData] = useState([]);
   const [monthlyData, setMonthlyData] = useState([]);
   const [portfolioData, setPortfolioData] = useState([]);
-  const [aiRecommendations, setAiRecommendations] = useState([]);
+  const [aiRecommendations] = useState([
+    { title: "Diversification Strategy", description: "Optimize your portfolio allocation", action: "View Details" },
+    { title: "Portfolio Prediction", description: "See future performance trends", action: "View Forecast" },
+    { title: "Risk Analysis", description: "Assess sector risks", action: "View Risks" },
+  ]);
   const [totalInvestments, setTotalInvestments] = useState(0);
   const [currentValue, setCurrentValue] = useState(0);
   const [overallPL, setOverallPL] = useState(0);
   const [loading, setLoading] = useState(true);
   const [hasUpstoxToken, setHasUpstoxToken] = useState(null);
+  const [activeTab, setActiveTab] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalContent, setModalContent] = useState({ suggestion: "", detailedSuggestion: "", chartData: [] });
 
   const navigate = useNavigate();
 
@@ -32,31 +42,18 @@ export default function Dashboard() {
           headers: { "x-access-token": token },
         });
         const profileData = await profileRes.json();
-        console.log("Profile data:", profileData);
         if (profileData.status !== "ok" || !profileData.profile) throw new Error("Failed to fetch profile");
         setHasUpstoxToken(!!profileData.profile.upstoxAccessToken);
 
         if (!profileData.profile.upstoxAccessToken) {
-          console.log("No Upstox token found");
           setLoading(false);
           return;
         }
 
-        // Fetch stocks (should auto-sync if empty)
-        console.log("Fetching stocks...");
         const stocksRes = await fetch(`${BASE_API_URL}/`, { headers: { "x-access-token": token } });
-        if (!stocksRes.ok) {
-          const errorText = await stocksRes.text();
-          throw new Error(`Failed to fetch stocks: ${errorText}`);
-        }
+        if (!stocksRes.ok) throw new Error("Failed to fetch stocks");
         const stocks = await stocksRes.json();
-        console.log("Fetched stocks:", stocks);
 
-        if (stocks.length === 0) {
-          console.log("No stocks found after fetch - auto-sync should have occurred");
-        }
-
-        // Transform portfolio data
         const transformedPortfolio = stocks.map((stock) => ({
           symbol: stock.tradingSymbol,
           netQty: stock.quantity,
@@ -75,11 +72,9 @@ export default function Dashboard() {
         setCurrentValue(currValue);
         setOverallPL(currValue - totalInv);
 
-        // Fetch portfolio history
         const historyRes = await fetch(`${BASE_API_URL}/portfolio/history`, { headers: { "x-access-token": token } });
         if (!historyRes.ok) throw new Error("Failed to fetch portfolio history");
         const { daily, monthly } = await historyRes.json();
-        console.log("Portfolio history:", { daily, monthly });
 
         setDailyData(daily.map((item) => ({
           name: new Date(item.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
@@ -90,15 +85,6 @@ export default function Dashboard() {
           name: new Date(`${item.date}-01`).toLocaleString("en-IN", { month: "short", year: "numeric" }),
           value: item.value,
         })));
-
-        // Set AI recommendations
-        const recommendations = [
-          { title: "Diversify Portfolio", description: "Consider adding more banking stocks", action: "View Suggestions" },
-          { title: "Potential Opportunity", description: "YESBANK showing momentum", action: "Research More" },
-          { title: "Risk Alert", description: "Infra sector exposure high", action: "Rebalance" },
-        ];
-        setAiRecommendations(recommendations);
-        console.log("AI Recommendations set:", recommendations);
 
         setLoading(false);
       } catch (error) {
@@ -113,10 +99,12 @@ export default function Dashboard() {
   const handleSyncPortfolio = async () => {
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`${BASE_API_URL}/portfolio/sync`, { headers: { "x-access-token": token } });
+      const res = await fetch(`${BASE_API_URL}/portfolio/sync`, {
+        method: "GET",
+        headers: { "x-access-token": token },
+      });
       if (!res.ok) throw new Error("Failed to sync portfolio");
       const data = await res.json();
-      console.log("Manual sync result:", data);
 
       const stocks = data.stocks || [];
       const transformedPortfolio = stocks.map((stock) => ({
@@ -153,6 +141,117 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Error syncing portfolio:", error);
     }
+  };
+
+  const fetchGeminiSuggestion = async (prompt) => {
+    try {
+      const response = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+        { contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 100 } },
+        { headers: { "Content-Type": "application/json" } }
+      );
+      return response.data.candidates[0].content.parts[0].text;
+    } catch (error) {
+      console.error("Gemini API error:", error);
+      return "Unable to generate suggestion at this time.";
+    }
+  };
+
+  const fetchHuggingFaceSuggestion = async (prompt) => {
+    try {
+      const response = await axios.post(
+        "https://api-inference.huggingface.co/models/distilgpt2",
+        { inputs: prompt, max_length: 150 },
+        { headers: { Authorization: `Bearer ${HF_API_TOKEN}` } }
+      );
+      return response.data[0].generated_text;
+    } catch (error) {
+      console.error("Hugging Face API error:", error);
+      return "Unable to generate detailed suggestion at this time.";
+    }
+  };
+
+  const generateDiversificationData = (currentPortfolio) => {
+    const currentTotal = currentPortfolio.reduce((sum, stock) => sum + stock.currentValue, 0);
+    const suggestedPortfolio = [
+      { name: "Banking", value: currentTotal * 0.4 },
+      { name: "Tech", value: currentTotal * 0.3 },
+      { name: "Infra", value: currentTotal * 0.2 },
+      { name: "Others", value: currentTotal * 0.1 },
+    ];
+    return currentPortfolio.map((stock, index) => ({
+      name: stock.symbol,
+      current: stock.currentValue,
+      suggested: suggestedPortfolio[index % 4].value / (currentPortfolio.length / 4),
+    }));
+  };
+
+  const generatePredictionData = (monthlyData) => {
+    const lastThreeMonths = monthlyData.slice(-3);
+    const futureThreeMonths = [];
+    const lastValue = lastThreeMonths[lastThreeMonths.length - 1]?.value || currentValue;
+    for (let i = 0; i < 3; i++) {
+      const date = new Date();
+      date.setMonth(date.getMonth() + i + 1);
+      const randomChange = (Math.random() - 0.5) * lastValue * 0.1;
+      futureThreeMonths.push({
+        name: date.toLocaleString("en-IN", { month: "short", year: "numeric" }),
+        predicted: lastValue + randomChange * (i + 1),
+      });
+    }
+    return [...lastThreeMonths, ...futureThreeMonths];
+  };
+
+  const generateRiskData = () => {
+    return [
+      { name: "Banking", value: 20, risk: "Low" },
+      { name: "Tech", value: 30, risk: "Medium" },
+      { name: "Infra", value: 40, risk: "High" },
+      { name: "Others", value: 10, risk: "Low" },
+    ];
+  };
+
+  const handleTabClick = async (index) => {
+    setActiveTab(index);
+    setModalOpen(true);
+
+    const rec = aiRecommendations[index];
+    let suggestion = "";
+    let detailedSuggestion = "";
+    let chartData = [];
+
+    if (index === 0) { // Diversification Strategy
+      suggestion = await fetchGeminiSuggestion(
+        `Suggest a diversification strategy for a portfolio with ${portfolioData.map(s => s.symbol).join(", ")}.`
+      );
+      detailedSuggestion = await fetchHuggingFaceSuggestion(
+        `${suggestion} Provide detailed steps to implement this strategy.`
+      );
+      chartData = generateDiversificationData(portfolioData);
+    } else if (index === 1) { // Portfolio Prediction
+      suggestion = await fetchGeminiSuggestion(
+        `Predict the portfolio performance for the next 3 months based on current value ${currentValue}.`
+      );
+      detailedSuggestion = await fetchHuggingFaceSuggestion(
+        `${suggestion} Explain the factors influencing this prediction.`
+      );
+      chartData = generatePredictionData(monthlyData);
+    } else if (index === 2) { // Risk Analysis
+      suggestion = await fetchGeminiSuggestion(
+        `Analyze the risk of the portfolio with ${portfolioData.map(s => s.symbol).join(", ")} based on global and local factors.`
+      );
+      detailedSuggestion = await fetchHuggingFaceSuggestion(
+        `${suggestion} Detail the risky sectors and mitigation steps.`
+      );
+      chartData = generateRiskData();
+    }
+
+    setModalContent({ suggestion, detailedSuggestion, chartData });
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setActiveTab(null);
   };
 
   if (loading) return <div className="p-4 lg:p-6 text-gray-400">Loading...</div>;
@@ -228,7 +327,7 @@ export default function Dashboard() {
             <h3 className="font-medium text-white">Portfolio Performance (Last 15 Days)</h3>
           </div>
           <div className="h-96">
-          <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%">
               <LineChart data={dailyData} margin={{ top: 10, right: 10, left: 40, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
                 <XAxis dataKey="name" stroke="#4b5563" padding={{ left: 10, right: 10 }} />
@@ -237,8 +336,8 @@ export default function Dashboard() {
                   tickFormatter={(value) => `₹${value.toLocaleString("en-IN")}`}
                   domain={["dataMin", "dataMax"]}
                   padding={{ top: 10, bottom: 10 }}
-                  tick={{ dx: -5, fill: "#4b5563" }} // Shift ticks slightly left and ensure visibility
-                  tickMargin={10} // Add space between ticks and axis line
+                  tick={{ dx: -5, fill: "#4b5563" }}
+                  tickMargin={10}
                 />
                 <Tooltip
                   contentStyle={{ backgroundColor: "#1e1e2d", borderColor: "#374151", borderRadius: "0.5rem" }}
@@ -260,38 +359,99 @@ export default function Dashboard() {
           <div className="absolute inset-0 rounded-xl p-[1px] bg-gradient-to-bl from-fuchsia-500/20 via-pink-500/10 to-purple-500/20"></div>
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-medium flex items-center">
+              <h3 className="font-medium flex items-center text-white">
                 <Zap className="h-4 w-4 mr-2 text-yellow-400" /> AI Recommendations
               </h3>
             </div>
+            <div className="flex space-x-2 mb-4">
+              {aiRecommendations.map((rec, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleTabClick(index)}
+                  className={`px-3 py-1 text-sm rounded-md transition-all duration-200 ${
+                    activeTab === index ? "bg-purple-600 text-white" : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                  }`}
+                >
+                  {rec.title}
+                </button>
+              ))}
+            </div>
             <div className="space-y-4">
-              {aiRecommendations.length > 0 ? (
-                aiRecommendations.map((rec, index) => (
-                  <div
-                    key={index}
-                    className="relative bg-white/5 rounded-lg p-4 border border-white/5 hover:border-purple-500/30 transition-all duration-200 overflow-hidden group"
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-fuchsia-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                    <div className="relative z-10">
-                      <div className="flex items-start justify-between">
-                        <h4 className="font-medium text-white">{rec.title}</h4>
-                        <Star className="h-4 w-4 text-yellow-400" />
-                      </div>
-                      <p className="text-sm text-gray-400 mt-1">{rec.description}</p>
-                      <button className="mt-3 text-sm text-purple-400 hover:text-purple-300 transition-colors flex items-center">
-                        {rec.action}
-                        <ArrowUpRight className="h-3 w-3 ml-1" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-gray-400">No recommendations available</p>
-              )}
+              {aiRecommendations.map((rec, index) => (
+                <div
+                  key={index}
+                  className={`p-4 ${activeTab === index ? "block" : "hidden"}`}
+                >
+                  <p className="text-sm text-gray-400">{rec.description}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </div>
+
+      {modalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-gray-900 p-6 rounded-xl w-11/12 max-w-3xl relative">
+            <button onClick={closeModal} className="absolute top-2 right-2 text-gray-400 hover:text-white">
+              <X className="h-6 w-6" />
+            </button>
+            <h4 className="text-lg font-medium text-white mb-4">{aiRecommendations[activeTab].title}</h4>
+            <p className="text-gray-300 mb-2"><strong>Gemini Insight:</strong> {modalContent.suggestion}</p>
+            <p className="text-gray-400 mb-4"><strong>Detailed Steps (Hugging Face):</strong> {modalContent.detailedSuggestion}</p>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                {activeTab === 0 ? (
+                  <BarChart data={modalContent.chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                    <XAxis dataKey="name" stroke="#4b5563" />
+                    <YAxis stroke="#4b5563" tickFormatter={(value) => `₹${value.toLocaleString("en-IN")}`} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#1e1e2d", borderColor: "#374151", borderRadius: "0.5rem" }}
+                      formatter={(value) => `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`}
+                    />
+                    <Bar dataKey="current" fill="#8b5cf6" name="Current" />
+                    <Bar dataKey="suggested" fill="#f43f5e" name="Suggested" />
+                  </BarChart>
+                ) : activeTab === 1 ? (
+                  <LineChart data={modalContent.chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                    <XAxis dataKey="name" stroke="#4b5563" />
+                    <YAxis stroke="#4b5563" tickFormatter={(value) => `₹${value.toLocaleString("en-IN")}`} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#1e1e2d", borderColor: "#374151", borderRadius: "0.5rem" }}
+                      formatter={(value) => `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`}
+                    />
+                    <Line type="monotone" dataKey="value" stroke="#8b5cf6" strokeWidth={2} name="Past" />
+                    <Line type="monotone" dataKey="predicted" stroke="#f43f5e" strokeWidth={2} strokeDasharray="5 5" name="Predicted" />
+                  </LineChart>
+                ) : (
+                  <PieChart>
+                    <Pie
+                      data={modalContent.chartData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {modalContent.chartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.risk === "High" ? "#f43f5e" : entry.risk === "Medium" ? "#facc15" : "#22c55e"} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#1e1e2d", borderColor: "#374151", borderRadius: "0.5rem" }}
+                      formatter={(value, name, props) => [`${props.payload.risk} Risk`, name]}
+                    />
+                  </PieChart>
+                )}
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-gray-900 p-5 rounded-xl mt-6">
         <div className="flex items-center justify-between mb-4">

@@ -11,6 +11,7 @@ import Accounts from "./Pages/Account/Accounts";
 import AccountDetails from "./Pages/Account/AccountDetails";
 import CategoryPage from "./Pages/Category/Category";
 import LandingPage from "./Pages/Landing/LandingPage"
+import { FinancialChatbot } from "./Pages/ChatBot/Chatbot";
 import "./App.css";
 
 // Public Layout Component (without Sidebar and Navbar)
@@ -85,7 +86,7 @@ function AppContent() {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    const protectedRoutes = ["/profile", "/stock", "/fd", "/accounts", "/accounts/:accountId", "/category"];
+    const protectedRoutes = ["/profile", "/stock", "/fd", "/accounts", "/accounts/:accountId", "/category", "/chatbot"];
 
     // If no token and trying to access a protected route, redirect to landing
     if (!token && protectedRoutes.some(route => location.pathname.startsWith(route))) {
@@ -135,6 +136,14 @@ function AppContent() {
         element={
           <ProtectedLayout>
             <StockApp />
+          </ProtectedLayout>
+        }
+      />
+      <Route
+        path="/chatbot"
+        element={
+          <ProtectedLayout>
+            <FinancialChatbot />
           </ProtectedLayout>
         }
       />

@@ -203,4 +203,18 @@ exports.getPortfolioHistory = async (req, res) => {
   }
 };
 
+// Get all stocks
+exports.getAllStocks = async (req, res) => {
+  try {
+    const token = req.headers["x-access-token"];
+    const user = await verifyToken(token);
+    const userId = user._id;
+    const stocks = await Stock.find({ userId });
+    res.json(stocks);
+  } catch (error) {
+    console.error("Error in getAllStocks:", error.message, error.stack);
+    res.status(400).json({ message: error.message });
+  }
+};
+
 module.exports = exports;

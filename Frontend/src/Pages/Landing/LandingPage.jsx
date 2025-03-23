@@ -17,7 +17,8 @@ export default function Home() {
         {/* Header */}
         <header className="container mx-auto px-4 py-6 flex justify-between items-center">
           <div className="flex items-center">
-            <h1 className="text-2xl font-bold">finex.</h1>
+            <h1 className="text-5xl font-bold">finex</h1>
+            <h1 className="text-5xl font-bold text-green-500">.</h1>
           </div>
           <Link className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-full px-6 py-2 transition-all duration-300 hover:shadow-[0_0_15px_rgba(124,58,237,0.5)] transform hover:scale-105" to={localStorage.getItem('token') ? '/' : '/login'}>
             {localStorage.getItem('token') ? 'Dashboard' : 'Get Started'}

@@ -30,7 +30,7 @@ const createGoal = async (req, res) => {
       currentAmount: 0,
       completed: false,
       description,
-      monthlyInvestment: monthlyInvestment || 0, // Default to 0 if not provided
+      monthlyInvestment: monthlyInvestment || 0,
     });
 
     await newGoal.save();
@@ -105,10 +105,28 @@ const getUserProfile = async (req, res) => {
   }
 };
 
+// Get user financials (only total monthly investment)
+const getUserFinancials = async (req, res) => {
+  try {
+    const token = req.headers["x-access-token"];
+    const user = await verifyToken(token);
+    const goals = await Goal.find({ userId: user._id });
+
+    // Calculate total monthly investment from all goals
+    const totalMonthlyInvestment = goals.reduce((sum, goal) => sum + (goal.monthlyInvestment || 0), 0);
+    const initialInvestment = goals.reduce((sum, goal) => sum + (goal.currentAmount || 0), 0);
+
+    res.status(200).json({ totalMonthlyInvestment, initialInvestment });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   createGoal,
   getUserGoals,
   updateGoal,
   deleteGoal,
   getUserProfile,
+  getUserFinancials,
 };

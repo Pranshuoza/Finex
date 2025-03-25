@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import { BarChart4 } from "lucide-react";
 
-export default function ProjectionChart({ investmentAmount }) {
+export default function ProjectionChart({ investmentAmount,  }) {
   const [projectionData, setProjectionData] = useState([]);
   const [timeFrame, setTimeFrame] = useState("2Y");
 

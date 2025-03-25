@@ -10,23 +10,33 @@ import FinancialMilestones from "./FinancialMilestones";
 export default function GoalsPage() {
   const [goals, setGoals] = useState([]);
   const [showNewGoalForm, setShowNewGoalForm] = useState(false);
-  const [investmentAmount] = useState(10000); // Hardcoded for demo
   const token = localStorage.getItem("token");
 
+
+  // Fetch goals on mount
   useEffect(() => {
-    const fetchGoals = async () => {
+    const fetchData = async () => {
+      if (!token) return;
+
       try {
-        const response = await axios.get("http://localhost:3000/goals/user", {
+        const goalsResponse = await axios.get("http://localhost:3000/goals/user", {
           headers: { "x-access-token": token },
         });
-        setGoals(Array.isArray(response.data) ? response.data.filter((goal) => goal && goal._id) : []);
+        const validGoals = Array.isArray(goalsResponse.data)
+          ? goalsResponse.data.filter((goal) => goal && goal._id)
+          : [];
+        setGoals(validGoals);
       } catch (error) {
         console.error("Error fetching goals:", error);
         setGoals([]);
       }
     };
-    if (token) fetchGoals();
+
+    fetchData();
   }, [token]);
+
+  // Calculate total monthly investment from goals
+  const totalMonthlyInvestment = goals.reduce((sum, goal) => sum + (goal.monthlyInvestment || 0), 0);
 
   const handleAddGoal = async (newGoal) => {
     try {
@@ -69,13 +79,18 @@ export default function GoalsPage() {
     <div className="p-4 lg:p-6 bg-gray-900 text-white">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
         <h1 className="text-2xl font-bold mb-4 lg:mb-0">Financial Goals</h1>
-        <button
-          onClick={() => setShowNewGoalForm(!showNewGoalForm)}
-          className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 font-medium flex items-center shadow-[0_0_15px_rgba(139,92,246,0.5)] hover:shadow-[0_0_20px_rgba(139,92,246,0.7)] hover:scale-105"
-        >
-          <PlusCircle className="h-4 w-4 mr-2" />
-          Add New Goal
-        </button>
+        <div className="flex items-center space-x-4">
+          <p className="text-sm text-gray-400">
+            Total Monthly Investment: ₹{totalMonthlyInvestment.toLocaleString("en-IN")}
+          </p>
+          <button
+            onClick={() => setShowNewGoalForm(!showNewGoalForm)}
+            className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 font-medium flex items-center shadow-[0_0_15px_rgba(139,92,246,0.5)] hover:shadow-[0_0_20px_rgba(139,92,246,0.7)] hover:scale-105"
+          >
+            <PlusCircle className="h-4 w-4 mr-2" />
+            Add New Goal
+          </button>
+        </div>
       </div>
 
       <GoalForm onAddGoal={handleAddGoal} showForm={showNewGoalForm} setShowForm={setShowNewGoalForm} />
@@ -91,8 +106,8 @@ export default function GoalsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[45%_55%] gap-6">
-        <AIRecommendations goals={goals} investmentAmount={investmentAmount} />
-        <ProjectionChart investmentAmount={investmentAmount} />
+        <AIRecommendations goals={goals} investmentAmount={totalMonthlyInvestment} />
+        <ProjectionChart investmentAmount={totalMonthlyInvestment } />
       </div>
 
       <FinancialMilestones goals={goals} />

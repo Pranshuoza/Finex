@@ -8,7 +8,7 @@ const goalSchema = new mongoose.Schema({
     currentAmount: { type: Number, default: 0 },
     completed: { type: Boolean, default: false },
     description: { type: String },
-    monthlyInvestment: { type: Number, default: 0 }, // New field
+    monthlyInvestment: { type: Number, default: 0 }, 
 });
 
 module.exports = mongoose.model('Goal', goalSchema);

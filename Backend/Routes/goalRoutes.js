@@ -7,5 +7,6 @@ router.get("/user", goalController.getUserGoals);
 router.put("/update/:id", goalController.updateGoal);
 router.delete("/delete/:id", goalController.deleteGoal);
 router.get("/userprofile", goalController.getUserProfile);
+router.get("/financial", goalController.getUserFinancials);
 
 module.exports = router;

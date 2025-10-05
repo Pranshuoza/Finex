@@ -29,7 +29,7 @@ export const FinancialChatbot = ({ metrics, recommendations = [], className = ""
 
   return (
     <div className={`p-4 lg:p-6 ${className}`}>
-      <div className="flex h-[100vh] w-full rounded-xl overflow-hidden">
+      <div className="flex h-[100vh] w-full rounded-xl overflow-hidden ">
         {/* Main Chat Area */}
         <div className="flex-1 flex flex-col relative bg-gradient-to-bl from-purple-900/50 via-gray-900/80 to-indigo-900/50 rounded-xl overflow-hidden">
           <div className="absolute inset-0 rounded-xl p-[1px] bg-gradient-to-bl from-purple-500/20 via-fuchsia-500/10 to-indigo-500/20"></div>

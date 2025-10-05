@@ -18,8 +18,8 @@ import { useNavigate } from "react-router-dom";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const BASE_API_URL = "http://localhost:3000/stocks";
-const GEMINI_API_KEY = "AIzaSyBO6FEgfYf1m0QFGkj3-fo4fi5g3HqmZbs";
-const HF_API_KEY = "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";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const HF_API_KEY = process.env.HF_API_KEY;
 const TIMEOUT_MS = 20000;
 
 const fallbackPortfolio = [
